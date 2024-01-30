@@ -7,7 +7,12 @@
 
 {{- $styleSheet := .StyleSheet }}
 
-{{- $preloadFontFamilies := (slice ($page.Param "fontFamilySans" | lower)) }}
+{{- $preloadFontFamilies := slice }}
+{{- with $fontTypeDefault := $page.Param "assets.styles.fonts.type.default" }}
+  {{- with $fontFamilyDefault := index ($page.Param "assets.styles.fonts.family") $fontTypeDefault }}
+    {{- $preloadFontFamilies = append (lower .) $preloadFontFamilies }}
+  {{- end }}
+{{- end }}
 {{- with $page.Scratch.Get "claris.assets.font.main" }}
   {{- $pageMainFontFamily := (lower .) }}
   {{- if (in $preloadFontFamilies $pageMainFontFamily) }}
@@ -32,13 +37,13 @@
   {{- warnf "%s[%s]: .Kind=%v: preloadFontFamilies=%v" $page $template $page.Kind $preloadFontFamilies }}
 {{- end }}
 
-{{- $preloadFontStyles := default (slice "normal") ($page.Param "assets.fonts.preload.styles") }}
+{{- $preloadFontStyles := default (slice "normal") ($page.Param "assets.styles.fonts.preload.styles") }}
 {{- $preloadFontStyles = apply $preloadFontStyles "lower" "." }}
 
-{{- $preloadFontWeights := default (slice "400") ($page.Param "assets.fonts.preload.weights") }}
+{{- $preloadFontWeights := default (slice "400") ($page.Param "assets.styles.fonts.preload.weights") }}
 {{- $preloadFontWeights = apply $preloadFontWeights "lower" "." }}
 
-{{- $preloadFontFormats := default (slice "woff2") ($page.Param "assets.fonts.preload.weights") }}
+{{- $preloadFontFormats := default (slice "woff2") ($page.Param "assets.styles.fonts.preload.weights") }}
 {{- $preloadFontFormats = apply $preloadFontFormats "lower" "." }}
 
 
@@ -51,7 +56,7 @@
 {{- $fontFormatRE := `url\(['"][^'"]+\.[a-z0-9]+['"]\)\s*format\(\s*['"]([^'"]+)['"]\)` }}
 {{- $fontFileURLRE := `url\(\s*['"]([^'"]+\.[a-z0-9]+)['"]\s*\)` }}
 
-{{- $fontsSelfHosted := $page.Param "style.fonts.selfhosted" | default false }}
+{{- $fontsSelfHosted := $page.Param "assets.styles.fonts.selfhosted" | default false }}
 
 {{- with and $fontsSelfHosted $styleSheet }}
   {{- $fontURLMatches := findRE $fontMatchRE (lower .unminified.Content) }}
