@@ -3,7 +3,11 @@
 {{/* {{- $debug = or $debug (not (not (findRE `never-match` $page.RelPermalink) ) ) }} */}}
 {{- $template := "claris/_functions/resources/images/aspect-ratio" }}
 
-{{- $aspectRatio := slice 0 0}}
+{{- $aspectRatio := dict }}
+
+{{- $aspectRatioFloat := (div (mul 1.0 $res.Width) $res.Height) }}
+{{- $aspectRatioRounded := div (math.Round (mul $aspectRatioFloat 1000) ) 1000 }}
+{{- $aspectRatioInteger := slice 0 0}}
 
 {{- $aspectRatios := (slice
   (slice 1 1)
@@ -49,22 +53,33 @@
     {{- end }}
   {{- end }}
 
-  {{- $aspectRatio = $bestMatch.AspectRatio }}
-
+  {{- $aspectRatioInteger = $bestMatch.AspectRatio }}
   {{- if (gt $res.Width $resShort) }}
-    {{- $aspectRatio = slice (index $aspectRatio 1) (index $aspectRatio 0) }}
+    {{- $aspectRatioInteger = slice (index $aspectRatioInteger 1) (index $aspectRatioInteger 0) }}
   {{- end }}
 
   {{- if $debug }}
     {{- warnf "%s[%s]: dimensions=%vx%v: aspectRatio=%0.4f: returning %v"
-        $res $template $res.Width $res.Height $resAspect $aspectRatio }}
+        $res $template $res.Width $res.Height $resAspect $aspectRatioInteger }}
   {{- end }}
 
 {{- else }}
 
   {{- warnf "%s[%s]: dimensions=%vx%v: returning default aspectRatio %v"
-      $res $template $res.Width $res.Height $aspectRatio }}
+      $res $template $res.Width $res.Height $aspectRatioInteger }}
 
+{{- end }}
+
+{{- if and (gt (index $aspectRatioInteger 0) 0) (gt (index $aspectRatioInteger 1) 0) }}
+  {{- $aspectRatio = (dict 
+    "integer" $aspectRatioInteger
+    "human" (printf "%dx%d" (index $aspectRatioInteger 0) (index $aspectRatioInteger 1) )
+    "float" $aspectRatioFloat
+    "rounded" $aspectRatioRounded
+  ) }}
+{{- else }}
+  {{- errorf "%s[%s]: invalid image resource='%v'[%T]"
+      page $template $res $res }}
 {{- end }}
 
 {{- return $aspectRatio }}
