@@ -1,0 +1,41 @@
+{{- $template := "claris/_functions/resources/images/image-sizespec" }}
+{{- $sizeSpec := "" }}
+{{- $page := default page .Page }}
+{{- $debug := false }}
+{{/* {{- $debug = or $debug .Debug -}} */}}
+
+{{- $width := .width }}
+{{- $height := .height }}
+{{- $aspectRatio := .aspectratio }}
+{{- with $width }}
+  {{- with $height }}
+    {{- $sizeSpec = printf "%dx%d" $width $height }}
+  {{- else }}
+    {{- with $aspectRatio }}
+      {{- $aspectRatioComponents := split . "x" }}
+      {{- with and (eq (len $aspectRatioComponents) 2) $aspectRatioComponents }}
+        {{- $horz := index . 0 | cast.ToFloat }}
+        {{- $vert := index . 1 | cast.ToFloat }}
+        {{- if and (gt $horz 0) (gt $vert 0) }}
+          {{- $aspectRatio = div $horz $vert }}
+        {{- else }}
+          {{- errorf "%s[%s] invalid .aspectratio=%v: horz=%v [%T] vert=%v [%T]"
+              $page.RelPermalink $template $aspectRatio $horz $horz $vert $vert }}
+        {{- end }}
+      {{- end }}
+      {{- $sizeSpec = printf "%dx%d" $width (div $width $aspectRatio | math.Round | cast.ToInt) }}
+    {{- else }}
+      {{- $sizeSpec = printf "%dx" $width }}
+    {{- end }}
+  {{- end }}
+{{- else }}
+  {{- with $height }}
+    {{- with $aspectRatio }}
+      {{- $sizeSpec = printf "%dx%d" (mul $height $aspectRatio | math.Round | cast.ToInt) $height }}
+    {{- else }}
+      {{- $sizeSpec = printf "x%d" $height }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- return $sizeSpec }}
