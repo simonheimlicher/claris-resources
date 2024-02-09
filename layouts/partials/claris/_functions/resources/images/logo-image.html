@@ -18,7 +18,7 @@
     $logoImageParams (dict "Page" $page) ) $logoImageParams -}}
 
   {{- if not $logoImageResource }}
-    {{- errorf "[%s]: Logo image resource '%v' not found" $template $logoImageResource }}
+    {{- errorf "[%s]: Logo image matching .resource='%v' not found" $template $logoImageSpec }}
   {{- end }}
 {{- /* {{- else }}
   {{- warnf "[%s]: invalid logo image: .LogoImageSpec='%v'" $template $logoImageSpec }} */ -}}
