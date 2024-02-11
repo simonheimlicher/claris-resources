@@ -1,0 +1,37 @@
+{{- $template := "claris/_functions/resources/images/get-process-image" }}
+{{- $processedImg := false }}
+{{- $page := default page .Page }}
+{{- $debug := false }}
+{{- $debug = or $debug .Debug -}}
+{{/* {{- $debug = or $debug (findRE `quantum-supremacy|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
+{{- $dbg := printf "%s[%s]" (replaceRE `.*?([^/]+)/?$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{- $processImageArgs := merge . (dict "Debug" $debug) }}
+
+{{- $img := .resource }}
+{{- $resourceType := printf "%T" $img }}
+{{- if not (strings.Contains $resourceType "*resources.resourceAdapter") }}
+  {{- $img = partialCached "claris/_functions/resources/get" $processImageArgs $processImageArgs }}
+  {{- $processImageArgs = merge $processImageArgs (dict
+    "resource" $img
+  ) }}
+  {{- $resourceType = printf "%T" $img }}
+{{- end }}
+
+{{- if strings.Contains $resourceType "*resources.resourceAdapter" }}
+
+  {{- $processedImg = partialCached "claris/_functions/resources/images/process-image" $processImageArgs $processImageArgs }}
+
+{{- else }}
+
+  {{- errorf `%s invalid .resource=%v [%T]: must be of type "*resources.resourceAdapter"` $dbg $img $img }}
+
+{{- end }}
+
+{{- if $debug }}
+  {{- warnf "%s returning %T %vx%v: %v" $dbg
+      $processedImg $processedImg.Width $processedImg.Height $processedImg }}
+{{- end }}
+{{- if not (strings.Contains (printf "%T" $processedImg) "*resources.resourceAdapter" ) }}
+  {{- errorf "%s invalid result: %T: %v" $dbg $processedImg $processedImg }}
+{{- end }}
+{{- return $processedImg }}

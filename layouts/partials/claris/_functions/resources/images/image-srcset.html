@@ -36,7 +36,7 @@
 {{- $img := false }}
 {{- $resType := printf "%T" $resourceSpec }}
 {{- if strings.Contains $resType "string" }}
-  {{- $img = partial "claris/_functions/resources/images/image-resource" $imageResourceArgs }}
+  {{- $img = partial "claris/_functions/resources/get" $imageResourceArgs }}
 {{- else if strings.Contains $resType "resources.resourceAdapter" }}
   {{- $img = $resourceSpec }}
 {{- /* else }}

@@ -37,5 +37,9 @@
     {{- end }}
   {{- end }}
 {{- end }}
-
+{{- if not $sizeSpec }}
+  {{- /* Maintain the same size */ -}}
+  {{- $sizeSpec = printf "%dx" .resource.Width }}
+{{- end }}
+  
 {{- return $sizeSpec }}

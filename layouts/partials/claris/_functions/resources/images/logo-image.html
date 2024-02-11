@@ -7,15 +7,13 @@
 {{- $logoImageResource := false }}
 
 {{- with $logoImageSpec }}
-  {{- $sizeSpec := printf "%dx%d" (int $logoImageWidth) (int $logoImageHeight) }}
   {{- $logoImageParams := (dict
     "resource" .
-    "process" (dict
-      "method" "fill"
-      "args" $sizeSpec )
-    ) }}
-  {{- $logoImageResource = partialCached "claris/_functions/resources/images/image-resource" (merge
-    $logoImageParams (dict "Page" $page) ) $logoImageParams -}}
+    "width" $logoImageWidth
+    "height" $logoImageHeight
+  ) }}
+  {{- $logoImageResource = partialCached "claris/_functions/resources/images/get-process-image" (merge $logoImageParams 
+      (dict "Page" $page)) $logoImageParams -}}
 
   {{- if not $logoImageResource }}
     {{- errorf "[%s]: Logo image matching .resource='%v' not found" $template $logoImageSpec }}
