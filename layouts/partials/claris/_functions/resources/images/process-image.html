@@ -23,12 +23,8 @@
     {{- $targetHeight = cast.ToInt . }}
   {{- end }}
   {{- $targetAspectRatio := false }}
-  {{- with .aspectratio }}
-    {{- with split . "x" }}
-      {{- $targetAspectRatio = div (cast.ToFloat (index . 0) ) (cast.ToFloat (index . 1) ) }}
-    {{- else }}
-      {{- $targetAspectRatio = cast.ToFloat . }}
-    {{- end }}
+  {{- if or .aspect .ratio .aspectratio }}
+    {{- $targetAspectRatio = partial "claris/_functions/resources/images/parse-aspect-ratio" . }}
   {{- end }}
   {{- $imgPosition := default false .position }}
 
@@ -68,7 +64,7 @@
   {{- else }}
     {{- if $debug }}
       {{- warnf "%s need to pass at least one of {.width|.height|.aspectratio}. Returning image unmodified: %v"
-          $page $template $img }}
+          $dbg $img }}
     {{- end }}
   {{- end }}
 

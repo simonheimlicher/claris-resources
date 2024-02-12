@@ -1,0 +1,57 @@
+{{- $template := "claris/_functions/resources/images/parse-aspect-ratio" }}
+{{- $page := default page .Page }}
+{{- $aspectParams := dict }}
+{{- range $k, $v := . }}
+  {{- if and $v (not (in (slice "Page" "version" "alt" "title") $k) ) }}
+    {{- $aspectParams = merge $aspectParams (dict $k $v) }}
+  {{- end }}
+{{- end }}
+{{- $resource := .resource }}
+{{/* .aspectratio: either a number or two numbers separated by the letter `x` */}}
+{{- $aspectRatio := .aspectratio }}
+{{/* .aspect two numbers separated by the letter `x` */}}
+{{- $aspect := .aspect }}
+{{/* .ratio: a number */}}
+{{- $ratio := .ratio }}
+{{/* .width: a number */}}
+{{- $width := .width }}
+{{/* .height: a number */}}
+{{- $height := .height }}
+
+{{- $debug := or false .Debug }}
+{{- /* $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `quantum-supremacy` $page.RelPermalink) ) ) ) */ -}}
+{{- /* $debug = or $debug (and (not site.LanguagePrefix) (eq $page.Kind "home" ) ) */ -}}
+{{- $dbg := printf "%s[%s]" (replaceRE `.*?([^/]+)/?$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{- $targetAspect := cast.ToFloat $ratio }}
+{{- if not $targetAspect }}
+  {{- with or
+      (and $aspectRatio (strings.Contains $aspectRatio "x") $aspectRatio)
+      (and $aspect      (strings.Contains $aspect "x")      $aspect) }}
+    {{- with split . "x" }}
+      {{- $width = index . 0 }}
+      {{- $height = index . 1 }}
+    {{- end }}
+  {{- end }}
+
+  {{- with and $aspectRatio (cast.ToFloat $aspectRatio) }}
+    {{- $targetAspect = . }}
+  {{- else }}
+    {{- if and $width $height }}
+      {{- $targetAspect = div (cast.ToFloat $width) (cast.ToFloat $height) }}
+    {{- end }}
+  {{- end }}
+
+{{- end }}
+
+{{- if $targetAspect }}
+  {{- if $debug }}
+    {{- warnf "%s .width=%v .height=%v .aspect=%v .ratio=%v --> targetAspect=%v"
+        $dbg $width $height $aspect $ratio $targetAspect }}
+  {{- end }}
+{{- else }}
+  {{- errorf "%s Cannot determine targetAspect based on arguments:\n%v"
+      $dbg (jsonify (dict "indent" "  ") $aspectParams) }}
+{{- end }}
+
+{{- return $targetAspect }}
