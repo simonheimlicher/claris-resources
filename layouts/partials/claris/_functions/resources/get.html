@@ -233,11 +233,26 @@ Discussion: https://discourse.gohugo.io/t/question-about-content-folder-structur
   {{- end }}
 {{- else }}
   {{- if (eq $page $originalPage) }}
-    {{- with resources.GetMatch $siteResourceGlob }}
-      {{- $res = . }}
-      {{- if $debug }}{{ warnf "%s[%s]: Found resource %s in site resources matching %s" $page $template . $siteResourceGlob }}{{ end -}}
-    {{- else }}
-      {{- if $debug }}{{ warnf "%s[%s]: No resource found in site resources matching %s" $page $template $siteResourceGlob }}{{ end -}}
+    {{- if not $res }}
+      {{- with $originalPage.File }}
+        {{ $path := path.Join .Dir $pageBundleResourceGlob }}
+        {{- with $resourcePage.Resources.GetMatch $path -}}
+          {{- $res = . }}
+          {{- if $debug }}
+            {{- warnf "%s Found page resource at path=%s: res=%#v" $dbg $path $res -}}
+          {{- end }}
+        {{- else }}
+          {{- if $debug }}{{ warnf "%s No page resource found at path=%s" $dbg $path }}{{ end -}}
+        {{- end }}
+      {{- end -}}
+    {{- end -}}
+    {{- if not $res }}
+      {{- with resources.GetMatch $siteResourceGlob }}
+        {{- $res = . }}
+        {{- if $debug }}{{ warnf "%s Found resource %s in site resources matching %s" $dbg . $siteResourceGlob }}{{ end -}}
+      {{- else }}
+        {{- if $debug }}{{ warnf "%s No resource found in site resources matching %s" $dbg $siteResourceGlob }}{{ end -}}
+      {{- end }}
     {{- end }}
   {{- else }}
     {{- if $debug }}{{ warnf "%s[%s]: Not looking at site resources: page=%s != originalPage=%s" $page $template $page $originalPage  }}{{ end -}}
