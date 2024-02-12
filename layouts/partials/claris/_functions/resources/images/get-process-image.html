@@ -9,7 +9,7 @@
 
 {{- $img := .resource }}
 {{- $resourceType := printf "%T" $img }}
-{{- if not (strings.Contains $resourceType "*resources.resourceAdapter") }}
+{{- if not (strings.Contains $resourceType "resources.resourceAdapter") }}
   {{- $img = partialCached "claris/_functions/resources/get" $processImageArgs $processImageArgs }}
   {{- $processImageArgs = merge $processImageArgs (dict
     "resource" $img
@@ -17,13 +17,13 @@
   {{- $resourceType = printf "%T" $img }}
 {{- end }}
 
-{{- if strings.Contains $resourceType "*resources.resourceAdapter" }}
+{{- if strings.Contains $resourceType "resources.resourceAdapter" }}
 
   {{- $processedImg = partialCached "claris/_functions/resources/images/process-image" $processImageArgs $processImageArgs }}
 
 {{- else }}
 
-  {{- errorf `%s invalid .resource=%v [%T]: must be of type "*resources.resourceAdapter"` $dbg $img $img }}
+  {{- errorf `%s invalid .resource=%v [%T]: must be of type "resources.resourceAdapter"` $dbg $img $img }}
 
 {{- end }}
 
@@ -31,7 +31,7 @@
   {{- warnf "%s returning %T %vx%v: %v" $dbg
       $processedImg $processedImg.Width $processedImg.Height $processedImg }}
 {{- end }}
-{{- if not (strings.Contains (printf "%T" $processedImg) "*resources.resourceAdapter" ) }}
+{{- if not (strings.Contains (printf "%T" $processedImg) "resources.resourceAdapter" ) }}
   {{- errorf "%s invalid result: %T: %v" $dbg $processedImg $processedImg }}
 {{- end }}
 {{- return $processedImg }}
