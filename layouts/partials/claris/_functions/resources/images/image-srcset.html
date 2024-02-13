@@ -6,10 +6,13 @@
 {{ $debug := or false .Debug }}
 {{/* {{ $debug = or $debug (findRE `technology/$` $page.RelPermalink) }} */}}
 {{ $dbg := printf "%s%s[%s]" site.LanguagePrefix (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `feature-image/` $page.RelPermalink) ) ) ) }}
+
 {{ $imageResourceArgs := merge . (dict "Debug" $debug) }}
 
 {{ $resourceSpec := .resource }}
-{{ $maxWidth := int (default 1.0e9 .width) }}
+{{ $maxWidth := int (default 1.0e9 .maxwidth) }}
+{{ $maxHeight := int (default 1.0e9 .maxheight) }}
 {{ $referenceWidth := int (default 768 .referencewidth) }}
 
 {{ $formatSrcsets := slice }}
@@ -20,7 +23,7 @@
 
 {{ $preferredFormat := "webp" }}
 {{ $defaultFormat := default "original" .format }}
-{{ $targetFormats := (slice $preferredFormat $defaultFormat) }}
+{{ $targetFormats := (slice $preferredFormat $defaultFormat) | uniq }}
 {{ with .targetformats }}
   {{ $targetFormats = . }}
 {{ end }}
@@ -44,39 +47,46 @@
 {{ end }}
 
 {{ with $img }}
-  {{ $originalFormat := $img.MediaType }}
-
-  {{/*  Crop the original image and use the result as the 
-         basis for all images of the src set.
-         To avoid later cropping, we create a copy of the
-         imageResourceArgs and remove the `aspectratio`
-         parameter */}}
-  {{ $srcSetArgs := merge $imageResourceArgs (dict
-    "aspectratio" false
-  ) }}
+  {{ $originalFormat := $img.MediaType.SubType }}
+  {{ $targetFormats = complement (slice $originalFormat) $targetFormats }}
+  {{ if $debug }}
+    {{ warnf "%s originalFormat=%v preferredFormat=%v --> targetFormats=%v" $dbg $originalFormat $preferredFormat $targetFormats }}
+  {{ end }}
+  
+  {{/*  Crop the original image and use the result as the basis for all images of the srcset.
+         To avoid later cropping, we create a copy of the imageResourceArgs and 
+         remove all size and aspect ratio parameters */}}
+  {{ $srcSetArgs := dict }}
+  {{ range $k, $v := $imageResourceArgs }}
+    {{ if not (in (slice "aspect" "ratio" "aspectratio" "maxwidth" "maxheight" "width" "height") $k) }}
+      {{ $srcSetArgs = merge $srcSetArgs (dict $k $v ) }}
+    {{ end }}
+  {{ end }}
   {{ $img = partial "claris/_functions/resources/images/process-image" (merge $imageResourceArgs  (dict
       "resource" $img
       "processingparams" $processingParams
     )
   ) }}
+  {{/* {{ $srcSetArgs := $imageResourceArgs }} */}}
 
   {{ $placeholderSvg := printf "<svg xmlns=%q viewBox=%q></svg>" "http://www.w3.org/2000/svg" (printf "0 0 %d %d" $img.Width $img.Height) | safeHTML }}
   {{ $placeholderInlineImg := printf "data:image/svg+xml,%s" $placeholderSvg | replaceRE " " "%20" | replaceRE "<" "%3c" | replaceRE ">" "%3e" | replaceRE "\"" "'" | safeURL }}
 
   {{ if $includePlaceholder }}
     {{ $placeholder := ($img | images.Filter (images.GaussianBlur 32)).Resize "32x q40" | images.Filter (images.GaussianBlur 2) }}
-    {{ $placeholderInlineImg = printf "data:image/jpeg;base64,%s" ($placeholder.Content | base64Encode) | safeURL | safeHTMLAttr }}
+    {{ $placeholderInlineImg = printf "data:%s;base64,%s" $placeholder.MediaType ($placeholder.Content | base64Encode) | safeURL | safeHTMLAttr }}
   {{ end }}
 
+  {{ $maxWidth = math.Min $maxWidth $img.Width | cast.ToInt }}
   {{ $roundBase := 2.0 }}
   {{ $sizeRange := 4.0 }}
   {{ $numVersions := int (add $sizeRange 1) }}
-  {{ if gt (div $img.Width $sizeRange) 512 }}
-    {{ $sizeRange = int (math.Ceil (div $img.Width 512) ) }}
+  {{ if gt (div $maxWidth $sizeRange) $referenceWidth }}
+    {{ $sizeRange = int (math.Ceil (div $maxWidth $referenceWidth) ) }}
     {{ $numVersions = int (add $sizeRange 1) }}
       {{ if $debug }}
         {{ warnf "%s img=%v[%dx%d] Increased sizeRange=%d numVersions=%d"
-          $dbg $img.Name $img.Width $img.Height $sizeRange $numVersions }}
+          $dbg $img.Name $maxWidth $img.Height $sizeRange $numVersions }}
       {{ end }}
   {{ end }}
   {{ $numVersions := int (add $sizeRange 1) }}
@@ -86,7 +96,6 @@
   {{ end }} */}}
 
   <!-- No changes below this line -->
-  {{ $maxWidth = int (math.Min $maxWidth $img.Width) }}
   {{ $powerBase := math.Pow $sizeRange (div 1.0 (sub $numVersions 1.0) ) }}
   {{/* {{ $baseWidthCalculated := div $maxWidth $sizeRange }}
   {{ $baseWidthCalculatedPrev := div $baseWidthCalculated $powerBase }}

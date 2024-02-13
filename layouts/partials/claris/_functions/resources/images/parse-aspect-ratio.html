@@ -21,10 +21,10 @@
 {{- $debug := or false .Debug }}
 {{- /* $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `quantum-supremacy` $page.RelPermalink) ) ) ) */ -}}
 {{- /* $debug = or $debug (and (not site.LanguagePrefix) (eq $page.Kind "home" ) ) */ -}}
-{{- $dbg := printf "%s[%s]" (replaceRE `.*?([^/]+)/?$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{- $dbg := printf "%s%s[%s]" site.LanguagePrefix (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
-{{- $targetAspect := cast.ToFloat $ratio }}
-{{- if not $targetAspect }}
+{{- $targetRatio := cast.ToFloat $ratio }}
+{{- if not $targetRatio }}
   {{- with or
       (and $aspectRatio (strings.Contains $aspectRatio "x") $aspectRatio)
       (and $aspect      (strings.Contains $aspect "x")      $aspect) }}
@@ -35,23 +35,23 @@
   {{- end }}
 
   {{- with and $aspectRatio (cast.ToFloat $aspectRatio) }}
-    {{- $targetAspect = . }}
+    {{- $targetRatio = . }}
   {{- else }}
     {{- if and $width $height }}
-      {{- $targetAspect = div (cast.ToFloat $width) (cast.ToFloat $height) }}
+      {{- $targetRatio = div (cast.ToFloat $width) (cast.ToFloat $height) }}
     {{- end }}
   {{- end }}
 
 {{- end }}
 
-{{- if $targetAspect }}
+{{- if $targetRatio }}
   {{- if $debug }}
-    {{- warnf "%s .width=%v .height=%v .aspect=%v .ratio=%v --> targetAspect=%v"
-        $dbg $width $height $aspect $ratio $targetAspect }}
+    {{- warnf "%s .width=%v .height=%v .aspect=%v .ratio=%v --> targetRatio=%v"
+        $dbg $width $height $aspect $ratio $targetRatio }}
   {{- end }}
 {{- else }}
-  {{- errorf "%s Cannot determine targetAspect based on arguments:\n%v"
+  {{- errorf "%s Cannot determine targetRatio based on arguments:\n%v"
       $dbg (jsonify (dict "indent" "  ") $aspectParams) }}
 {{- end }}
 
-{{- return $targetAspect }}
+{{- return $targetRatio }}
