@@ -19,7 +19,7 @@
 
 {{- if strings.Contains $resourceType "resources.resourceAdapter" }}
 
-  {{- $processedImg = partialCached "claris/_functions/resources/images/process-image" $processImageArgs $processImageArgs }}
+  {{- $processedImg = partialCached "claris/_functions/resources/images/process-image" $processImageArgs (merge $processImageArgs (dict "Page" false)) }}
 
 {{- else }}
 
