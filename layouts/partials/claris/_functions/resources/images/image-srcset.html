@@ -5,8 +5,8 @@
 {{ $pageId := $page.RelPermalink }}
 {{ $debug := or false .Debug }}
 {{/* {{ $debug = or $debug (findRE `technology/$` $page.RelPermalink) }} */}}
-{{ $dbg := printf "%s%s[%s]" site.LanguagePrefix (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
-{{ $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `feature-image/` $page.RelPermalink) ) ) ) }}
+{{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{/* {{ $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `quantum-supremacy/` $page.RelPermalink) ) ) ) }} */}}
 
 {{ $imageResourceArgs := merge . (dict "Debug" $debug) }}
 

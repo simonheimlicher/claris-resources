@@ -2,9 +2,9 @@
 {{ $processedImg := false }}
 {{ $page := default page .Page }}
 {{ $debug := or false .Debug }}
-{{/* $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `feature-image/` $page.RelPermalink) ) ) ) */}}
-{{ $dbg := printf "%s%s[%s]" site.LanguagePrefix (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
-{{ $processImageArgs := (dict "Debug" $debug) }}
+{{/* {{ $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `feature-image/` $page.RelPermalink) ) ) ) }} */}}
+{{ $debug = or $debug (and (not site.LanguagePrefix) (strings.Contains .resource.Name "logo") ) }}
+{{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $img := .resource }}
 
