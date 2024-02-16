@@ -2,185 +2,68 @@
 {{ $processedImg := false }}
 {{ $page := default page .Page }}
 {{ $debug := or false .Debug }}
-{{/* {{ $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `feature-image/` $page.RelPermalink) ) ) ) }} */}}
-{{ $debug = or $debug (and (not site.LanguagePrefix) (strings.Contains .resource.Name "logo") ) }}
+{{/* $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `feature-image/` $page.RelPermalink) ) ) ) */}}
+{{/* $debug = or $debug (and (not site.LanguagePrefix) (strings.Contains .resource.Name "logo") ) */}}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $img := .resource }}
 
+{{ $processImageArgs := (dict "resource" $img "Debug" $debug) }}
+
 {{ if (strings.Contains (printf "%T" $img) "resources.resourceAdapter" ) }}
 
-  {{ $processingParams := default dict .processingparams }}
-
-  {{ $targetWidth := false }}
-  {{ with .width }}
-    {{ $targetWidth = cast.ToInt . }}
-  {{ end }}
-  {{ $targetHeight := false }}
-  {{ with .height }}
-    {{ $targetHeight = cast.ToInt . }}
-  {{ end }}
-
-  {{ $maxWidth := default 1e9 .maxwidth | cast.ToInt }}
-  {{ $maxHeight := default 1e9 .maxheight | cast.ToInt }}
-  {{ if or (lt $maxWidth 16) (lt $maxHeight 16) }}
-    {{ errorf "%s invalid .maxwidth=%v or .maxheight=%v" $dbg .maxwidth .maxheight }}
-  {{ end }}
-
-  {{ $targetRatio := .ratio }}
-  {{ if or .aspect .aspectratio }}
-    {{ $targetRatio = partial "claris/_functions/resources/images/parse-aspect-ratio" . }}
-  {{ end }}
-  
   {{ $imgPosition := default false .position }}
 
-  {{ $originalAspectRatio := div (cast.ToFloat $img.Width) (cast.ToFloat $img.Height) }}
+  {{ $dim := partial "claris/_functions/resources/images/parse-image-dimensions" . }}
+  {{ $originalRatio := $dim.original.ratio }}
+  {{ $targetWidth := $dim.target.width }}
+  {{ $targetHeight := $dim.target.height }}
+  {{ $targetRatio := $dim.target.ratio }}
+
+  {{ $processImageArgs = merge $processImageArgs $dim.target }}
 
   {{ $aspectRatioTolerance := 0.0001 }}
-
-  {{ if $targetWidth }}
-    {{ if $targetHeight }}
-      {{ if $targetRatio }}
-        {{ errorf "%s ignoring .aspectratio. Specify at most two out of .width=%v .height=%v {.aspect=%v|.ratio=%v|.aspectratio=%v}"
-            $dbg .width .height .aspect .ratio .aspectratio }}
-      {{ end }}
-      {{/* When both width and height are given, we potentially change the aspect ratio, 
-          hence we calculate it here and act as if it had been passed in */}}
-      {{ $targetRatio = div (mul 1.0 $targetWidth) $targetHeight }}
-    {{ else }}
-      {{ if $targetRatio }}
-        {{ $targetHeight = div $targetWidth $targetRatio | math.Round | cast.ToInt }}
-      {{ else }}
-        {{ $targetHeight = div $targetWidth $originalAspectRatio | math.Round | cast.ToInt }}
-      {{ end }}
-    {{ end }}
-  {{ else if $targetHeight }}
-    {{ if $targetRatio }}
-      {{ $targetWidth = mul $targetHeight $targetRatio | math.Round | cast.ToInt }}
-    {{ else }}
-      {{ $targetWidth = mul $targetHeight $originalAspectRatio | math.Round | cast.ToInt }}
-    {{ end }}
-  {{ else if $targetRatio }}
-    {{ $targetWidth = $img.Width }}
-    {{ $targetHeight = $img.Height }}
-    {{ if gt $targetRatio $originalAspectRatio }}
-      {{ $targetWidth = mul $targetHeight $targetRatio | math.Round | cast.ToInt }}
-    {{ else if lt $targetRatio $originalAspectRatio }}
-      {{ $targetHeight = div $targetWidth $targetRatio | math.Round | cast.ToInt }}
-    {{ end }}
-  {{ else }}
-    {{ if $debug }}
-      {{ warnf "%s need to pass at least one of {.width|.height|.aspectratio|.aspect|.ratio|}. Returning image unmodified: %v"
-          $dbg $img }}
-    {{ end }}
-    {{ $targetWidth = $img.Width }}
-    {{ $targetHeight = $img.Height }}
-  {{ end }}
-
-  {{ if or (lt $targetWidth 1) (lt $targetHeight 1) }}
-    {{ errorf "%s invalid $targetWidth=%v or $targetHeight=%v before considering .maxwidth=%v and .maxheight=%v on page %v"
-        $dbg $targetWidth $targetHeight .maxwidth .maxheight $page }}
-  {{ end }}
-
-  {{ $targetWidth = math.Min $targetWidth $maxWidth | cast.ToInt }}
-  {{ $targetHeight = math.Min $targetHeight $maxHeight | cast.ToInt }}
-  {{ $maxRatio := div (cast.ToFloat $maxWidth) (cast.ToFloat $maxHeight) }}
-  {{ $outputRatio := $targetRatio }}
-  {{ if $targetRatio }}
-    {{ $processImageArgs = merge $processImageArgs (dict
-      "ratio" $targetRatio
-    ) }}
-  {{ else }}
-    {{ $outputRatio = $originalAspectRatio }}
-  {{ end }}
-
-  {{ if gt $outputRatio $maxRatio }}
-    {{ $targetHeight = div $targetWidth $outputRatio | math.Round | cast.ToInt }}
-    {{ $processImageArgs = merge $processImageArgs (dict
-      "width" $targetWidth
-    ) }}
-  {{ else }}
-    {{ $targetWidth = mul $targetHeight $outputRatio | math.Round | cast.ToInt }}
-    {{ $processImageArgs = merge $processImageArgs (dict
-      "height" $targetWidth
-    ) }}
-  {{ end }}
-  {{ if or (lt $targetWidth 1) (lt $targetHeight 1) }}
-    {{ errorf "%s invalid $targetWidth=%v or $targetHeight=%v after applying .maxwidth=%v and .maxheight=%v on page %v"
-        $dbg $targetWidth $targetHeight .maxwidth .maxheight $page }}
-  {{ end }}
-
   {{ $aspectRatioDeviation := false }}
 
   {{ if $targetRatio }}
-    {{ $aspectRatioDeviation = math.Pow (sub (div $originalAspectRatio $targetRatio) 1) 2 }}
+    {{ $aspectRatioDeviation = math.Pow (sub (div $originalRatio $targetRatio) 1) 2 }}
   {{ end }}
 
   {{ if or (not $targetRatio) (lt $aspectRatioDeviation $aspectRatioTolerance) }}
     {{ if $debug }}
       {{ if $targetRatio }}
-        {{ warnf "%s aspectRatioDeviation=%v < %v: originalAspectRatio=%v == %v=targetRatio"
-            $dbg $aspectRatioDeviation $aspectRatioTolerance $originalAspectRatio $targetRatio }}
+        {{ warnf "%s maintain aspect: aspectRatioDeviation=%v < %v, resize originalRatio=%v to targetRatio=%v"
+            $dbg $aspectRatioDeviation $aspectRatioTolerance $originalRatio $targetRatio }}
       {{ else }}
-        {{ $calculatedTargetAspectRatio := div (cast.ToFloat $targetWidth) (cast.ToFloat $targetHeight) }}
-        {{ warnf "%s no targetRatio: originalAspectRatio=%v == aspect ratio of target dimensions=%v"
-            $dbg $originalAspectRatio $calculatedTargetAspectRatio }}
+        {{ warnf "%s maintain aspect: no targetRatio, keep originalRatio=%.4g"
+            $dbg $originalRatio }}
       {{ end }}
     {{ end }}
 
-    {{/* The aspect ratio remains the same and we simply resize the image.
-        We set the anchor to `Center` by default, unless specified otherwise */}}
-    {{ $processingParams = merge $processingParams (dict 
-      "anchor" ($processingParams.anchor | default "Center")
-    ) }}
+    {{/* The aspect ratio remains the same, hence resize the image */}}
 
-    {{ $initialResizeArgs := partial "claris/_functions/resources/images/processing-args" (merge $processImageArgs (dict
-      "processingparams" $processingParams
+    {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+      "method" "Resize"
+      "anchor" "Center"
     ) ) }}
-    {{ $processedImg = $img.Resize $initialResizeArgs }}
+
     {{ if $debug }}
-      {{ warnf "%s resized %v[%dx%d]-->%v[%dx%d] with %v" $dbg $img $img.Width $img.Height
-          $processedImg $processedImg.Width $processedImg.Height $initialResizeArgs }}
+      {{ warnf "%s resized original, maintaining aspect ratio: [%dx%d, %.4g]-->[%dx%d, %.4g]"
+          $dbg $img.Width $img.Height $originalRatio $processedImg.Width $processedImg.Height
+          (div (cast.ToFloat $processedImg.Width) (cast.ToFloat $processedImg.Height) ) }}
     {{ end }}
     
   {{ else }}
 
-    {{/* The aspect ratio changes, hence we need to be careful to consider the 
-        position of the image when cropping */}}
+    {{/* The aspect ratio changes, hence we crop the image either horizontally or vertically */}}
 
-    {{ $cropHorizontally := gt $originalAspectRatio $targetRatio }}
-
-    {{ if $cropHorizontally }}
-      <!-- Original aspect ratio > target aspect ratio:
-      use height of original and reduce width to match target aspect ratio -->
-      {{ if not $targetHeight }}
-        {{ $targetHeight = $img.Height }}
-      {{ end }}
-      {{ if not $targetWidth }}
-        {{ $targetWidth = mul $targetHeight $targetRatio | math.Round | cast.ToInt }}
-      {{ end }}
-
-    {{ else }}
-    
-      <!-- Original aspect ratio < target aspect ratio:
-      use width of original but reduce height to match target aspect ratio -->
-      {{ if not $targetWidth }}
-        {{ $targetWidth = $img.Width }}
-      {{ end }}
-      {{ if not $targetHeight }}
-        {{ $targetHeight = div $targetWidth $targetRatio | math.Round | cast.ToInt }}
-      {{ end }}
-    {{ end }}
-
-    {{ if $debug }}
-      {{ warnf "%s crop original imgage %v [%dx%d] given .aspectratio=%v .width=%v .height=%v --> targetRatio: %v target dimensions: %dx%d"
-          $dbg $img $img.Width $img.Height $.aspectratio $.width $.height
-          $targetRatio $targetWidth $targetHeight }}
-    {{ end }}
+    {{ $ratioRatio := div $targetRatio $originalRatio }}
 
     {{ if $imgPosition }}
+
       {{/* Crop such that visible part as determined by the aspect ratio
             is consistent with the uncropped image */}} 
+
       {{ $posHorizontal := 0.5 }}
       {{ $posVertical := 0.5 }}
       {{ $imgPosComponents := slice }}
@@ -223,91 +106,110 @@
       {{ end }}
 
       {{ if $debug }}
-        {{ warnf "%s need to crop %s as image aspect ratio (img.Width/img.Height) = %v %v target targetRatio = %v"
-            $dbg (or (and $cropHorizontally "horizontally") "vertically")
-            (div (float $img.Width) $img.Height) (or (and $cropHorizontally ">") "<") $targetRatio }}
+        {{ warnf "%s crop %s as targetRatio = %v %v original ratio (img.Width/img.Height) = %v"
+            $dbg (or (and (gt $ratioRatio 1.0) "horizontally") "vertically")
+            (div (float $img.Width) $img.Height) (or (and (gt $ratioRatio 1.0) ">") "<") $targetRatio }}
       {{ end }}
 
-      {{ if $cropHorizontally }}
-
-        {{/* If posHorizontal is > 0: crop from top */}}
-        {{ $ratioWidth := mul $img.Height $targetRatio }}
-        {{ $widthLeftCrop := add $ratioWidth (mul $posHorizontal (sub $img.Width $ratioWidth)) | math.Round | cast.ToInt }}
-        {{ if eq $widthLeftCrop $img.Width }}
-          {{ $processedImg = $img }}
-        {{ else }}
-          {{ $paramsCropLeft := printf "%dx%d Left" $widthLeftCrop $img.Height }}
-          {{ if $debug }}
-            {{ warnf "%s crop left: posHorizontal=%v .Width=%v ratioWidth=%v targetWidth=%v paramsCropLeft=%v"
-                $dbg $posHorizontal $img.Width
-                $ratioWidth $targetWidth $paramsCropLeft }}
-          {{ end }}
-          {{ $processedImg = $img.Crop $paramsCropLeft }}
-        {{ end }}
-
-        {{/* If posHorizontal == 1, targetWidth == processedImg.Width
-            but we still call `img.Fill` to convert the format etc. */}} 
-        {{ $processingParamsFillRight := merge $processingParams (dict 
-          "anchor" "Right"
-        ) }}
-        {{ $processingArgsFillRight := partial "claris/_functions/resources/images/processing-args" (merge $processImageArgs (dict
-            "processingparams" $processingParamsFillRight
-        ) ) }}
-        {{ if $debug }}
-          {{ warnf "%s fill right: posHorizontal=%v .Width=%v ratioWidth=%v targetWidth=%v processingArgsFillRight=%v"
-              $dbg $posHorizontal $processedImg.Width
-              $ratioWidth $targetWidth $processingArgsFillRight }}
-        {{ end }}
-        {{ $processedImg = $img.Fill $processingArgsFillRight }}
-
-      {{ else }}
+      {{ if gt $ratioRatio 1.0 }}
 
         {{ $ratioHeight := div $img.Width $targetRatio }}
-        {{ $heightTopCrop := add $ratioHeight (mul $posVertical (sub $img.Height $ratioHeight)) | math.Round | cast.ToInt }}
-        {{/* If posVertical is > 0, heightTopCrop < img.Height: crop from top */}}
-        {{ if eq $heightTopCrop $img.Height }}
-          {{ $processedImg = $img }}
-        {{ else }}
-          {{ $cropParamsCropTop := printf "%dx%d Top" $img.Width $heightTopCrop }}
-          {{ if $debug }}
-            {{ warnf "%s crop top: posVertical=%v .Height=%v ratioHeight=%v targetHeight=%v cropParamsCropTop=%v"
-                $dbg $posVertical $img.Height
-                $ratioHeight $targetHeight $cropParamsCropTop }}
-          {{ end }}
-          {{ $processedImg = $img.Crop $cropParamsCropTop }}
-        {{ end }}
-
-        {{/* If posVertical == 1, targetHeight == processedImg.Height
-            but we still call `image-fill` to convert the format etc. */}}
-        {{ $processingParamsFillBottom := merge $processingParams (dict 
-          "anchor" "Bottom"
-        ) }}
-        {{ $processingArgsFillBottom := partial "claris/_functions/resources/images/processing-args" (merge $processImageArgs (dict
-            "processingparams" $processingParamsFillBottom
-        ) ) }}
         {{ if $debug }}
-          {{ warnf "%s fill right: posHorizontal=%v .Height=%v ratioHeight=%v targetHeight=%v processingArgsFillBottom=%v"
-              $dbg $posHorizontal $processedImg.Height
-              $ratioHeight $targetHeight $processingArgsFillBottom }}
+          {{ warnf "%s posVertical=%v .Height=%v ratioHeight=%v targetHeight=%v"
+              $dbg $posVertical $img.Height $ratioHeight $targetHeight }}
         {{ end }}
-        {{ $processedImg = $img.Fill $processingArgsFillBottom }}
 
+        {{ if eq $posVertical 0.0 }}
+          {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+            "method" "Fill"
+            "anchor" "Top"
+          ) ) }}
+        {{ else if eq $posVertical 1.0 }}
+          {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+            "method" "Fill"
+            "anchor" "Bottom"
+          ) ) }}
+
+        {{ else }}
+
+          {{/* Crop with anchor set to Bottom, then fill with anchor set to Top */}}
+        
+          {{ $cropHeight := sub $img.Height (mul $posVertical (sub $img.Height $ratioHeight) ) | math.Round | cast.ToInt }}
+    
+          {{/* Crop from top */}}
+          {{ $cropArgs := printf "%dx%d Bottom" $img.Width $cropHeight }}
+          {{ if $debug }}
+            {{ warnf "%s .Crop %v: posVertical=%v .Height=%v ratioHeight=%v"
+                $dbg $cropArgs $posVertical $img.Height $ratioHeight }}
+          {{ end }}
+          {{ $processedImg = $img.Crop $cropArgs }}
+
+          {{/* Fill from bottom */}}
+          {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+            "resource" $processedImg
+            "method" "Crop"
+            "anchor" "Top"
+          ) ) }}
+        {{ end }}
+  
+      {{ else if lt $ratioRatio 1.0 }}
+
+        {{ $ratioWidth := mul $img.Height $targetRatio }}
+        {{ if $debug }}
+          {{ warnf "%s posHorizontal=%v .Width=%v ratioWidth=%v targetWidth=%v"
+              $dbg $posHorizontal $img.Width $ratioWidth $targetWidth }}
+        {{ end }}
+
+        {{ if eq $posHorizontal 0.0 }}
+          {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+            "method" "Fill"
+            "anchor" "Left"
+          ) ) }}
+        {{ else if eq $posHorizontal 1.0 }}
+          {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+            "method" "Fill"
+            "anchor" "Right"
+          ) ) }}
+
+        {{ else }}
+
+          {{/* Crop with anchor set to Right, then fill with anchor set to Left */}}
+        
+          {{ $cropWidth := sub $img.Width (mul $posHorizontal (sub $img.Width $ratioWidth) ) | math.Round | cast.ToInt }}
+    
+          {{/* Crop from Left */}}
+          {{ $cropArgs := printf "%dx%d Right" $cropWidth $img.Height }}
+          {{ if $debug }}
+            {{ warnf "%s .Crop %v: posHorizontal=%v .Width=%v ratioWidth=%v"
+                $dbg $cropArgs $posHorizontal $img.Width $ratioWidth }}
+          {{ end }}
+          {{ $processedImg = $img.Crop $cropArgs }}
+
+          {{/* Fill from Left */}}
+          {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+            "resource" $processedImg
+            "method" "Fill"
+            "anchor" "Left"
+          ) ) }}
+        {{ end }}
+
+      {{ else }}
+        {{ warnf "%s ratioRatio=%v" $ratioRatio }}
+        {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+          "method" "Fill"
+          "anchor" "Center"
+        ) ) }}
       {{ end }}
 
     {{ else }}
 
-      {{/* Use Hugo's smart crop to determine anchor of crop */}}
-      {{ $processingParamsFill := merge $processingParams (dict 
-        "anchor" ($processingParams.anchor | default "Smart")
-      ) }}
-      {{ $processingArgsFill := partial "claris/_functions/resources/images/processing-args" (merge $processImageArgs (dict
-          "processingparams" $processingParamsFill
+      {{/* .Fill with Hugo's smart crop to determine anchor of crop */}}
+
+      {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
+        "method" "Fill"
+        "anchor" "Smart"
       ) ) }}
-      {{ if $debug }}
-        {{ warnf "%s fill to ratio: targetWidth=%v targetRatio=%v processingArgsFill=%v"
-            $dbg $targetWidth $targetRatio $processingArgsFill }}
-      {{ end }}
-      {{ $processedImg = $img.Fill $processingArgsFill }}
+
     {{ end }}
   {{ end }}
 
@@ -317,7 +219,7 @@
 
 {{ end }}
 
-{{ if and false $debug }}
+{{ if $debug }}
   {{ warnf "%s returning %T %vx%v: %v" $dbg
       $processedImg $processedImg.Width $processedImg.Height $processedImg }}
 {{ end }}
@@ -326,33 +228,55 @@
 {{ end }}
 {{ return $processedImg }}
 
-{{ define "partials/claris/_functions/resources/images/processing-args" }}
-  {{ $template := "claris/_functions/resources/images/processing-args" }}
-  {{ $page := page }}
+{{ define "partials/claris/_functions/resources/images/process" }}
+  {{ $template := "claris/_functions/resources/images/process" }}
+  {{ $page := default page .Page }}
   {{ $debug := or false .Debug }}
-  {{ $dbg := printf "%s%s[%s]" site.LanguagePrefix (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
-  
-  {{ $processingArgsList := slice }}
-  {{ with .sizespec | default (partial "claris/_functions/resources/images/image-sizespec" . ) }}
-    {{ $processingArgsList = append . $processingArgsList }}
-  {{ end }}
-  
-  {{ with .quality }}
-    {{ $processingArgsList = append (printf "q%d" .) $processingArgsList }}
-  {{ end }}
-  
-  {{ with .processingparams }}
-    {{ range $k, $v := . }}
-      {{ with $v }}
-        {{ $processingArgsList = append . $processingArgsList }}
-      {{ end }}
-    {{ end }}
-  {{ end }}
+  {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+  {{ $processedImg := .resource }}
 
-  {{ $processingArgs := delimit $processingArgsList " " }}
-  {{ if $debug }}
-    {{ warnf `%s processingArgs=%q from .sizespec=%v .width=%v .height=%v .quality=%v .processingparams=%v` $dbg
-        $processingArgs .sizespec .width .height .quality .processingparams }}
+  {{ if and ($img := .resource) ($processingMethod := lower .method) }}
+  
+    {{ $processingArgsList := slice }}
+    
+    {{ with .sizespec }}
+      {{ $processingArgsList = append . $processingArgsList }}
+    {{ end }}
+
+    {{ with .quality }}
+      {{ $processingArgsList = append (printf "q%d" .) $processingArgsList }}
+    {{ end }}
+    
+    {{ with .anchor }}
+      {{ $processingArgsList = append . $processingArgsList }}
+    {{ end }}
+
+    {{ with $processingArgsList }}
+      {{ $processingArgs := delimit $processingArgsList " " }}
+
+      {{ if $debug }}
+        {{ warnf `%s .%s %q` $dbg (strings.FirstUpper $processingMethod) $processingArgs }}
+      {{ end }}
+
+      {{ if in (slice "resize") $processingMethod }}
+        {{ $processedImg = $img.Resize $processingArgs }}
+      {{ else if in (slice "fill") $processingMethod }}
+        {{ $processedImg = $img.Fill $processingArgs }}
+      {{ else if in (slice "crop") $processingMethod }}
+        {{ $processedImg = $img.Crop $processingArgs }}
+      {{ else }}
+        {{ errorf "%s invalid arguments: .resource=%v: an image resource and .method=%v: name of a valid processing method: resize | fill | crop"
+            $dbg .resource .method }}
+      {{ end }}
+    {{ else }}
+      {{ errorf "%s .resource=%v .method=%v: nothing to do based on processing arguments:\n%v"
+          $dbg .resource .method (jsonify (dict "indent" "  ") . ) }}
+      {{ $processedImg = $img }}
+    {{ end }}
+
+  {{ else }}
+    {{ errorf "%s required arguments: .resource=%v: an image resource and .method=%v: name of a valid processing method: resize | fill | crop"
+        $dbg .resource .method }}
   {{ end }}
-  {{ return $processingArgs }}
+  {{ return $processedImg }}
 {{ end }}

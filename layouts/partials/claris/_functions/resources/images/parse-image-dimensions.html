@@ -1,0 +1,235 @@
+{{ $template := "claris/_functions/resources/images/parse-image-dimensions" }}
+{{ $parsedDimensions := dict }}
+{{ $page := default page .Page }}
+{{ $debug := or false .Debug }}
+{{/* {{- $debug = or $debug (findRE `quantum-supremacy|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
+{{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{ $img := .resource }}
+
+{{ $targetWidth := false }}
+{{ $targetHeight := false }}
+{{ $targetSizeSpec := false }}
+{{ $originalRatio := false }}
+{{ $targetDimensions := dict }}
+
+{{ $width := false }}
+{{ with .width }}
+  {{ $width = cast.ToInt . }}
+{{ end }}
+{{ $height := false }}
+{{ with .height }}
+  {{ $height = cast.ToInt . }}
+{{ end }}
+
+{{ with .sizespec }}
+  {{ with and (strings.Contains . "x") (split . "x") }}
+    {{ $width := index . 0 | math.Round | cast.ToInt }}
+    {{ $height := index . 1 | math.Round | cast.ToInt }}
+  {{ else }}
+    {{ errorf "%s invalid .sizespec=%v" $dbg . }}
+  {{ end }}
+{{ end }}
+
+{{ $maxDimension := 10240 }}
+{{ $maxWidth := default $maxDimension .maxwidth | cast.ToInt }}
+{{ $maxHeight := default $maxDimension .maxheight | cast.ToInt }}
+{{ if or (lt $maxWidth 1) (lt $maxHeight 1) }}
+  {{ errorf "%s invalid .maxwidth=%v or .maxheight=%v" $dbg .maxwidth .maxheight }}
+{{ end }}
+
+{{ with $img }}
+  {{ $originalRatio = div (cast.ToFloat .Width) (cast.ToFloat .Height) }}
+  {{/* Constrain to original image dimensions */}}
+  {{ $maxWidth = math.Min $maxWidth .Width | cast.ToInt }}
+  {{ $maxHeight = math.Min $maxHeight .Height | cast.ToInt }}
+{{ end }}
+
+{{ $ratio := .ratio | cast.ToFloat }}
+{{ if or .aspect .aspectratio }}
+  {{ $ratio = partial "claris/_functions/resources/images/parse-aspect-ratio" . }}
+{{ end }}
+
+{{/* First, we calculate the request dimensions, unconstrained by max width and max height */}}
+
+{{ $requestWidth := $width }}
+{{ $requestHeight := $height }}
+{{ $requestRatio := $ratio }}
+
+{{ if and $width $height $ratio }}
+  {{ errorf "%s ignoring .ratio. Please specify only two out of .width=%v .height=%v .ratio=%v"
+      $dbg $width $height $ratio }}
+  {{ $requestRatio = false }}
+{{ end }}
+
+{{ if $requestWidth }}
+  {{ if $requestHeight }}
+    {{/* When both width and height are given, we potentially change the aspect ratio, 
+        hence we calculate the targeting requestRatio as if it had been passed in */}}
+    {{ $requestRatio = div (mul 1.0 $requestWidth) $requestHeight }}
+  {{ else }}
+    {{ if $requestRatio }}
+      {{ $requestHeight = div $requestWidth $requestRatio | math.Round | cast.ToInt }}
+    {{ else }}
+      {{ $requestHeight = div $requestWidth $originalRatio | math.Round | cast.ToInt }}
+    {{ end }}
+  {{ end }}
+{{ else if $requestHeight }}
+  {{ if $requestRatio }}
+    {{ $requestWidth = mul $requestHeight $requestRatio | math.Round | cast.ToInt }}
+  {{ else }}
+    {{ $requestWidth = mul $requestHeight $originalRatio | math.Round | cast.ToInt }}
+  {{ end }}
+{{ else if $requestRatio }}
+  {{ $requestWidth = $maxWidth }}
+  {{ $requestHeight = $maxHeight }}
+  {{ if gt $requestRatio $originalRatio }}
+    {{ $requestHeight = div $requestWidth $requestRatio | math.Round | cast.ToInt }}
+  {{ else if lt $requestRatio $originalRatio }}
+    {{ $requestWidth = mul $requestHeight $requestRatio | math.Round | cast.ToInt }}
+  {{ end }}
+{{ else }}
+  {{ $requestWidth = $maxWidth }}
+  {{ $requestHeight = $maxHeight }}
+  {{ $requestRatio = div (mul 1.0 $requestWidth) $requestHeight }}
+{{ end }}
+
+{{ if or (lt $requestWidth 1) (lt $requestHeight 1) }}
+  {{ errorf "%s invalid $requestWidth=%v or $requestHeight=%v before considering .maxwidth=%v and .maxheight=%v on page %v"
+      $dbg $requestWidth $requestHeight .maxwidth .maxheight $page }}
+{{ end }}
+
+{{ $argsList := slice }}
+{{ if $debug }}
+  {{ $args := . }}
+  {{ range $k := slice "sizespec" "width" "height" "aspect" "ratio" "aspectratio" "maxwidth" "maxheight" }}
+    {{ with $v := (index $args $k) }}
+      {{ if strings.Contains (printf "%T" $v) "float" }}
+        {{ $v = printf "%.4g" $v }}
+      {{ end }}
+      {{ $argsList = append (printf "%v=%v" $k $v) $argsList }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ if $requestWidth }}
+  {{ $targetWidth = (math.Min $maxWidth $requestWidth) | math.Round | cast.ToInt }}
+{{ end }}
+{{ if $requestHeight }}
+  {{ $targetHeight = (math.Min $maxHeight $requestHeight) | math.Round | cast.ToInt }}
+{{ end }}
+
+{{ if $requestRatio }}
+
+  {{/* If requestRatio is specified, we need to update the width to match the constrained height or vice versa */}}
+  {{ $constrainHorizontally := gt $requestRatio $originalRatio }}
+  {{ if $debug }}
+    {{ $constrainString := cond $constrainHorizontally "horizontally" "vertically" }}
+    {{ warnf "%s original=[%dx%d, %.4g] request=[%dx%d%s] to be constrained %s to %dx%d [args: %v]"
+      $dbg $img.Width $img.Height $originalRatio $requestWidth $requestHeight
+      (cond (not $requestRatio) "" (printf ", ratio=%.4g" $requestRatio) )
+      $constrainString $maxWidth $maxHeight
+      (delimit $argsList " ") }}
+  {{ end }}
+  
+  {{ if $constrainHorizontally }}
+    {{/* Request aspect is wider than original, hence we need to constrain 
+      targeting dimensions to *width* of original image. */}}
+      {{/* If requestWidth is defined, targetWidth has already been constrained above. 
+      However, if requestHeight has been specified, we need to constrain it 
+      such that the targeting width does not exceed the original width */}}
+      {{ if $requestHeight }}
+        {{ $targetWidth = (math.Min $targetWidth (mul $img.Height $requestRatio) ) | math.Round | cast.ToInt }}
+        {{ if $debug }}
+          {{ warnf "%s targetWidth=%d from min(%v, %v)" $dbg $targetWidth $targetWidth (mul $img.Height $requestRatio) }}
+        {{ end }}
+      {{ else }}
+        {{ $targetWidth = $img.Width }}
+        {{ if $debug }}
+          {{ warnf "%s targetWidth=%d from img.Width=%v" $dbg $targetWidth $img.Width }}
+        {{ end }}
+      {{ end }}
+      {{/* Update targetHeight to match constrained targetWidth */}}
+      {{ $targetHeight = (div $targetWidth $requestRatio) | math.Round | cast.ToInt }}
+  {{ else }}
+    {{/* Request aspect is narrower than original, hence we need to constrain 
+      targeting dimensions to *height* of original image.
+      If requestHeight is defined, targetHeight has already been constrained above. 
+      However, if requestWidth has been specified, we need to constrain it 
+      such that the targeting height does not exceed the original height */}}
+      {{ if $requestHeight }}
+        {{ $targetHeight = (math.Min $targetHeight (div $img.Width $requestRatio) ) | math.Round | cast.ToInt }}
+        {{ if $debug }}
+          {{ warnf "%s targetHeight=%d from min(%v, %v)" $dbg $targetHeight $targetHeight (div $img.Width $requestRatio) }}
+        {{ end }}
+      {{ else }}
+        {{ $targetHeight = $img.Height }}
+        {{ if $debug }}
+          {{ warnf "%s targetHeight=%d from img.Width=%v" $dbg $targetHeight $img.Height }}
+        {{ end }}
+      {{ end }}
+      {{/* Update targetWidth to match constrained targetHeight */}}
+      {{ $targetWidth = (mul $targetHeight $requestRatio) | math.Round | cast.ToInt }}
+  {{ end }}
+
+{{ else }}
+  {{ if $debug }}
+    {{ warnf "%s original=[%dx%d, %.4g] initial request=[%dx%d%s] [args: %v]"
+      $dbg $img.Width $img.Height $originalRatio $requestWidth $requestHeight
+      (cond (not $requestRatio) "" (printf ", ratio=%.4g" $requestRatio) )
+      (delimit $argsList " ") }}
+  {{ end }}
+{{ end }}
+
+{{ if $targetWidth }}
+  {{ if $targetHeight }}
+    {{ $targetSizeSpec = printf "%dx%d" $targetWidth $targetHeight }}
+    {{ $targetDimensions = (dict
+      "width" $targetWidth
+      "height" $targetHeight
+      "sizespec" $targetSizeSpec) }}
+  {{ else }}
+    {{ $targetSizeSpec = printf "%dx" $targetWidth }}
+    {{ $targetDimensions = (dict
+      "width" $targetWidth
+      "sizespec" $targetSizeSpec) }}
+  {{ end }}
+{{ else if $targetHeight }}
+  {{ $targetSizeSpec = printf "x%d" $targetHeight }}
+  {{ $targetDimensions = (dict
+    "height" $targetHeight
+    "sizespec" $targetSizeSpec) }}
+{{ else }}
+  {{ errorf "%s invalid arguments: request=%vx%v, ratio=%v target=%vx%v %v" $dbg 
+  $requestWidth $requestHeight $requestRatio
+  (cond (not $targetWidth) "" $targetWidth) (cond (not $targetHeight) "" $targetHeight)
+  (jsonify (dict "indent" "  ") . ) }}
+{{ end }}
+
+{{ with $requestRatio }}
+  {{ $targetDimensions = merge $targetDimensions (dict
+    "ratio" $requestRatio) }}
+{{ end }}
+
+{{ if $debug }}
+  {{ if $img }}
+    {{ warnf "%s returning sizespec=%v%v target=%v constrained by original[%dx%d] [args: %v]"
+        $dbg $targetSizeSpec (cond (not $requestRatio) "" (printf " ratio=%.4g" $requestRatio)) $targetDimensions
+        $img.Width $img.Height (delimit $argsList " ") }}
+  {{ else }}
+    {{ warnf "%s returning sizespec=%v%v target=%v [args: %v]" $dbg $targetSizeSpec
+    (cond (not $requestRatio) "" (printf " ratio=%.4g" $requestRatio)) $targetDimensions (delimit $argsList " ") }}
+  {{ end }}
+{{ end }}
+
+{{ $parsedDimensions = dict "target" $targetDimensions }}
+{{ with .resource }}
+  {{ $parsedDimensions = merge $parsedDimensions (dict
+    "original" (dict
+      "width" .Width
+      "height" .Height
+      "ratio" $originalRatio
+    )
+  ) }}
+{{ end }}
+{{ return $parsedDimensions }}

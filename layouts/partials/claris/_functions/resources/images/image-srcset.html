@@ -19,8 +19,6 @@
 
 {{ $targetQuality := default "default" .quality }}
 
-{{ $processingParams := default dict .processingparams }}
-
 {{ $preferredFormat := "webp" }}
 {{ $defaultFormat := default "original" .format }}
 {{ $targetFormats := (slice $preferredFormat $defaultFormat) | uniq }}
@@ -64,7 +62,6 @@
   {{ end }}
   {{ $img = partial "claris/_functions/resources/images/process-image" (merge $imageResourceArgs  (dict
       "resource" $img
-      "processingparams" $processingParams
     )
   ) }}
   {{/* {{ $srcSetArgs := $imageResourceArgs }} */}}
@@ -85,8 +82,8 @@
     {{ $sizeRange = int (math.Ceil (div $maxWidth $referenceWidth) ) }}
     {{ $numVersions = int (add $sizeRange 1) }}
       {{ if $debug }}
-        {{ warnf "%s img=%v[%dx%d] Increased sizeRange=%d numVersions=%d"
-          $dbg $img.Name $maxWidth $img.Height $sizeRange $numVersions }}
+        {{ warnf "%s [%dx%d] Increased sizeRange=%d numVersions=%d"
+          $dbg $maxWidth $img.Height $sizeRange $numVersions }}
       {{ end }}
   {{ end }}
   {{ $numVersions := int (add $sizeRange 1) }}
@@ -104,7 +101,8 @@
 
   {{ $srcSetWidths := slice }}
 
-  {{ $widthCalculated := int (div $maxWidth $sizeRange) }}
+  {{/* {{ $widthCalculated := int (div $maxWidth $sizeRange) }} */}}
+  {{ $widthCalculated := $referenceWidth }}
   {{ $widthCalculatedPrev := int (div $widthCalculated $powerBase) }}
   {{ $baseWidth := 0 }}
 
@@ -176,8 +174,9 @@
     {{ $srcSetList := slice }}
     {{ $qualityFactor := false }}
 
+    {{ $formatSrcSetArgs := $srcSetArgs}}
     {{ if ne $format "original" }}
-      {{ $processingParams = merge $processingParams (dict "format" $format) }}
+      {{ $formatSrcSetArgs = merge $formatSrcSetArgs (dict "format" $format) }}
     {{ end }}
 
     {{ $meanQuality := int (math.Round (add $qualitySpec.min (div (sub $qualitySpec.max $qualitySpec.min) 2) ) ) }}
@@ -203,11 +202,10 @@
                   {{ errorf "%s invalid candQuality=%v" $dbg $candQuality }}
                 {{ end }}
 
-                {{ $resizedCandImg := partial "claris/_functions/resources/images/process-image" (merge $srcSetArgs  (dict
+                {{ $resizedCandImg := partial "claris/_functions/resources/images/process-image" (merge $formatSrcSetArgs (dict
                     "resource" $img
                     "width" $nominalWidth
                     "quality" $candQuality
-                    "processingparams" $processingParams
                   )
                 ) }}
                 {{ with $resizedCandImg }}
@@ -221,8 +219,8 @@
                   {{ if or (eq $i (sub $maxIterations 1) ) (lt $deviation $deviationMin) (eq $candQuality $qualitySpec.min) (eq $candQuality $qualitySpec.max) }}
                     {{ $qualityFactor = math.Min $qualityFactorMax (math.Max $qualityFactorMin $candFactor) }}
                     {{ if $debug }}
-                      {{ warnf "%s img=%v: %v[%dx%d] MP=%3.1f | size: cand=%4.1fkB target=%4.1fkB | kB/MP: last=%4.1f cand=%4.1f target=%4.1f | ratio: last=%4.1f cand=%4.1f | quality: midpoint=%2d last=%2d cand=%2d | factor: cand=%.2f final=%v"
-                        $dbg $img.Name $format .Width .Height $sizeMP $sizeKB $targetSizeKB
+                      {{ warnf "%s %v[%dx%d] MP=%3.1f | size: cand=%4.1fkB target=%4.1fkB | kB/MP: last=%4.1f cand=%4.1f target=%4.1f | ratio: last=%4.1f cand=%4.1f | quality: midpoint=%2d last=%2d cand=%2d | factor: cand=%.2f final=%v"
+                        $dbg $format .Width .Height $sizeMP $sizeKB $targetSizeKB
                         $lastKBperMP $candKBPerMP (float $targetKBperMP)
                         $lastRefRatio $candRefRatio
                         $meanQuality $lastQuality $candQuality
@@ -243,8 +241,8 @@
                           {{ $dir = ">" }}
                           {{ $verb = "decreas" }}
                         {{ end }}
-                        {{ warnf "%s img=%v: size=%4.1fkB %s target=%4.1fkB: candQuality=%d start %sing: nextQuality=%2.0f"
-                            $dbg $img.Name $sizeKB $dir $targetSizeKB $candQuality $verb $nextQuality }}
+                        {{ warnf "%s size=%4.1fkB %s target=%4.1fkB: candQuality=%d start %sing: nextQuality=%2.0f"
+                            $dbg $sizeKB $dir $targetSizeKB $candQuality $verb $nextQuality }}
                       {{ end }}
                     {{ else }}
                       {{ if gt $candRefRatio 1.0 }}
@@ -271,14 +269,14 @@
                         {{ if or (and (gt $candRefRatio 1.0) (lt $lastRefRatio 1.0)) (and (lt $candRefRatio 1.0) (gt $lastRefRatio 1.0)) }}
                           {{ $s = printf "reverse and %se" $verb }}
                         {{ end }}
-                        {{ warnf "%s img=%v: size=%4.1fkB %s target=%4.1fkB: candQuality=%d %s: nextQuality=%2.0f"
-                            $dbg $img.Name $sizeKB $dir $targetSizeKB $candQuality $s $nextQuality }}
+                        {{ warnf "%s size=%4.1fkB %s target=%4.1fkB: candQuality=%d %s: nextQuality=%2.0f"
+                            $dbg $sizeKB $dir $targetSizeKB $candQuality $s $nextQuality }}
                       {{ end }}
                     {{ end }}
                     {{ $nextQuality = int (math.Min $qualitySpec.max (math.Max $qualitySpec.min (math.Round $nextQuality) ) ) }}
                     {{ if $debug }}
-                      {{ warnf "%s img=%v: %v[%dx%d] MP=%3.1f | size: cand=%4.1fkB target=%4.1fkB | kB/MP: last=%4.1f cand=%4.1f target=%4.1f | ratio: last=%4.2f cand=%4.2f | quality: midpoint=%2d last=%2d cand=%2d next=%2d | factor: cand=%.2f"
-                        $dbg $img.Name $format .Width .Height $sizeMP $sizeKB $targetSizeKB
+                      {{ warnf "%s %v[%dx%d] MP=%3.1f | size: cand=%4.1fkB target=%4.1fkB | kB/MP: last=%4.1f cand=%4.1f target=%4.1f | ratio: last=%4.2f cand=%4.2f | quality: midpoint=%2d last=%2d cand=%2d next=%2d | factor: cand=%.2f"
+                        $dbg $format .Width .Height $sizeMP $sizeKB $targetSizeKB
                         $lastKBperMP $candKBPerMP (float $targetKBperMP)
                         $lastRefRatio $candRefRatio
                         $meanQuality $lastQuality $candQuality $nextQuality
@@ -308,11 +306,10 @@
         {{ warnf "%s invalid quality=%v" $dbg $quality }}
       {{ end }}
 
-      {{ $resizedImg = partial "claris/_functions/resources/images/process-image" (merge $srcSetArgs  (dict
+      {{ $resizedImg = partial "claris/_functions/resources/images/process-image" (merge $formatSrcSetArgs (dict
           "resource" $img
           "width" $nominalWidth
           "quality" $quality
-          "processingparams" $processingParams
         )
       ) }}
 
@@ -322,9 +319,9 @@
         {{ $sizeMP := div (mul 1.0 .Width .Height) 1000000 }}
         {{ $scaledKBPerMP := div $sizeKB $sizeMP }}
         {{ if and $qualityFactor $debug }}
-          {{ warnf "%s img=%v[%dx%d] -> %v[%dx%d] size=%dkB %.1fMP kB/MP=%.1f meanQuality=%d quality=%d"
+          {{ warnf "%s [%dx%d] -> %v[%dx%d] size=%dkB %.1fMP kB/MP=%.1f meanQuality=%d quality=%d"
             $dbg
-            $img.Name $img.Width $img.Height $format .Width .Height
+            $img.Width $img.Height $format .Width .Height
             $sizeKB $sizeMP $scaledKBPerMP  $meanQuality $quality }}
         {{ end }}
       {{ end }}
