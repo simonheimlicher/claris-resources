@@ -5,15 +5,22 @@
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $img := .resource }}
+{{ $originalRatio := false }}
 
-{{ $processImageArgs := (dict "resource" $img "Debug" $debug) }}
+{{ $processingArgNames := slice "resource" "format" "quality" }}
+{{ $processImageArgs := (dict "Debug" $debug) }}
+{{ range $k, $v := . }}
+  {{ with and $v (in $processingArgNames $k) }}
+    {{ $processImageArgs = merge $processImageArgs (dict $k $v) }}
+  {{ end }}
+{{ end }}
 
 {{ if (strings.Contains (printf "%T" $img) "resources.resourceAdapter" ) }}
 
   {{ $imgPosition := default false .position }}
 
   {{ $dim := partial "claris/_functions/resources/images/parse-image-dimensions" . }}
-  {{ $originalRatio := $dim.original.ratio }}
+  {{ $originalRatio = $dim.original.ratio }}
   {{ $targetWidth := $dim.target.width }}
   {{ $targetHeight := $dim.target.height }}
   {{ $targetRatio := $dim.target.ratio }}
@@ -104,9 +111,9 @@
       {{ end }}
 
       {{ if $debug }}
-        {{ warnf "%s crop %s as targetRatio = %v %v original ratio (img.Width/img.Height) = %v"
+        {{ warnf "%s crop %s as targetRatio = %v %v %v = original ratio (img.Width/img.Height)"
             $dbg (or (and (gt $ratioRatio 1.0) "horizontally") "vertically")
-            (div (float $img.Width) $img.Height) (or (and (gt $ratioRatio 1.0) ">") "<") $targetRatio }}
+            $targetRatio (or (and (gt $ratioRatio 1.0) "<") ">") $originalRatio }}
       {{ end }}
 
       {{ if gt $ratioRatio 1.0 }}
@@ -145,7 +152,7 @@
           {{/* Fill from bottom */}}
           {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
             "resource" $processedImg
-            "method" "Crop"
+            "method" "Fill"
             "anchor" "Top"
           ) ) }}
         {{ end }}
@@ -201,7 +208,7 @@
 
     {{ else }}
 
-      {{/* .Fill with Hugo's smart crop to determine anchor of crop */}}
+      {{/* .Fill with Hugo's `Smart` algorithm to determine the anchor of crop */}}
 
       {{ $processedImg = partial "claris/_functions/resources/images/process" (merge $processImageArgs (dict
         "method" "Fill"
@@ -218,8 +225,11 @@
 {{ end }}
 
 {{ if $debug }}
-  {{ warnf "%s returning %T %vx%v: %v" $dbg
-      $processedImg $processedImg.Width $processedImg.Height $processedImg }}
+  {{ warnf "%s returning %v[%dx%d ratio=%.4g] from %v[%dx%d ratio=%.4g] with args: %#v" $dbg
+      $processedImg.MediaType
+      $processedImg.Width $processedImg.Height
+      (div (cast.ToFloat $processedImg.Width) (cast.ToFloat $processedImg.Height) )
+      $img.MediaType $img.Width $img.Height $originalRatio $processImageArgs }}
 {{ end }}
 {{ if not (strings.Contains (printf "%T" $processedImg) "resources.resourceAdapter" ) }}
   {{ errorf "%s invalid result: %T: %v" $dbg $processedImg $processedImg }}
@@ -227,10 +237,10 @@
 {{ return $processedImg }}
 
 {{ define "partials/claris/_functions/resources/images/process" }}
-  {{ $template := "claris/_functions/resources/images/process" }}
+  {{ $template := "claris/_functions/resources/images/process-image" }}
   {{ $page := default page .Page }}
-  {{ $debug := or false .Debug }}
-  {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+  {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
   {{ $processedImg := .resource }}
 
   {{ if and ($img := .resource) ($processingMethod := lower .method) }}
@@ -241,14 +251,23 @@
       {{ $processingArgsList = append . $processingArgsList }}
     {{ end }}
 
-    {{ with .quality }}
-      {{ $processingArgsList = append (printf "q%d" .) $processingArgsList }}
-    {{ end }}
-    
     {{ with .anchor }}
       {{ $processingArgsList = append . $processingArgsList }}
     {{ end }}
 
+    {{ with .format }}
+      {{ $supportedFormats := slice "gif" "jpeg" "png" "tiff" "webp" }}
+      {{ if in $supportedFormats . }}
+        {{ $processingArgsList = append . $processingArgsList }}
+      {{ else }}
+        {{ errorf "%s invalid format: %q" $dbg . }}
+      {{ end }}
+    {{ end }}
+    
+    {{ with .quality }}
+      {{ $processingArgsList = append (printf "q%d" .) $processingArgsList }}
+    {{ end }}
+    
     {{ with $processingArgsList }}
       {{ $processingArgs := delimit $processingArgsList " " }}
 
