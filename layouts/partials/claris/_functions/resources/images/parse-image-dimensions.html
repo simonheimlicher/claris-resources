@@ -1,8 +1,8 @@
 {{ $template := "claris/_functions/resources/images/parse-image-dimensions" }}
 {{ $parsedDimensions := dict }}
 {{ $page := default page .Page }}
-{{ $debug := or false .Debug }}
-{{/* {{- $debug = or $debug (findRE `quantum-supremacy|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{/* {{- $debug = or $debug (findRE `feature-image|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $img := .resource }}

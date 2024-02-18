@@ -1,5 +1,8 @@
 {{- $imgSizesAttr := "" }}
 {{- $page := page }}
+{{- $debug := false }}
+{{- $template := "claris/_functions/resources/images/img-sizes-attr" }}
+
 {{- $targetRelativeWidth := default 100 . }}
 {{- if reflect.IsMap . }}
   {{- with .Page }}
@@ -9,9 +12,6 @@
     {{- $targetRelativeWidth = . }}
   {{- end }}
 {{- end }}
-{{- $debug := false }}
-{{/* {{- $debug = or $debug (not (not (findRE `never-match` $page.RelPermalink) ) ) }} */}}
-{{- $template := "claris/_functions/resources/images/img-sizes-attr" }}
 
 {{- $breakpointRelativeWidthToWidth := (dict
   "mobile" (dict

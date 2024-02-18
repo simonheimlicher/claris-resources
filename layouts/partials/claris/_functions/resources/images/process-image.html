@@ -1,9 +1,7 @@
 {{ $template := "claris/_functions/resources/images/process-image" }}
 {{ $processedImg := false }}
 {{ $page := default page .Page }}
-{{ $debug := or false .Debug }}
-{{/* $debug = or $debug (and (not site.LanguagePrefix) (not (not (findRE `feature-image/` $page.RelPermalink) ) ) ) */}}
-{{/* $debug = or $debug (and (not site.LanguagePrefix) (strings.Contains .resource.Name "logo") ) */}}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $img := .resource }}

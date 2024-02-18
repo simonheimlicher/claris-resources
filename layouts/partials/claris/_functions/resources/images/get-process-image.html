@@ -1,9 +1,8 @@
 {{- $template := "claris/_functions/resources/images/get-process-image" }}
 {{- $processedImg := false }}
 {{- $page := default page .Page }}
-{{- $debug := false }}
-{{- $debug = or $debug .Debug -}}
-{{/* {{- $debug = or $debug (findRE `quantum-supremacy|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
+{{- $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{/* {{- $debug = or $debug (findRE `feature-image|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
 {{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 {{- $processImageArgs := merge . (dict "Debug" $debug) }}
 
