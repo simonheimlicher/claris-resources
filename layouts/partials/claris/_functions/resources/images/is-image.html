@@ -1,0 +1,9 @@
+{{ $img := false }}
+{{ if strings.Contains (printf "%T" . ) "resources.resourceAdapter" }}
+  {{ if eq .ResourceType "image" }}
+    {{ if and (gt .Width 0) (gt .Height 0) }}
+      {{ $img = . }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+{{ return $img }}
