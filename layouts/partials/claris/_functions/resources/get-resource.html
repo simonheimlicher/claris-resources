@@ -1,16 +1,44 @@
 {{ $res := false }}
-{{ $template := "claris/_functions/resources/get" }}
+{{ $template := "claris/_functions/resources/get-resource" }}
 {{ $page := .Page }}
 {{ $originalPage := default .Page .OriginalPage }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 {{ $imageResourceArgs := merge . (dict "Debug" $debug) }}
 
-{{ with $resource := .resource }}
+{{ $resourceType := default "image" .resourcetype }}
+{{ with $resourceArg := .resource }}
+  {{ if eq $resourceType "image" }}
+    {{ with partialCached "claris/_functions/resources/images/is-image" $resourceArg $resourceArg }}
+      {{ $res = . }}
+    {{ else }}
+      {{ errorf "%s .resource=%v [type=%T] is not an image resource" $dbg $resourceArg $resourceArg }}
+    {{ end }}
+  {{ else if eq .ResourceType $resourceType }}
+    {{ $res = . }}
+  {{ else }}
+    {{ errorf "%s .resource=%v [type=%T] has wrong .ResourceType=%v != %v" $dbg
+        $resourceArg $resourceArg $resourceArg.ResourceType $resourceType }}
+  {{ end }}
+{{ end }}
+
+{{/* Look for resource matching .src, starting at page resources of $page */}}
+{{ $src := false }}
+{{ if not $res }}
+  {{ if $page }}
+    {{ with .src }}
+      {{ $src = . }}
+    {{ else }}
+      {{ errorf "%s[%s] Need either .resource=%v [%T] or .src=%v [%T]" $page $template .resource .resource .src .src }}
+    {{ end }}
+  {{ else }}
+    {{ errorf "%s[%s] missing page at which to start lookup: .Page=%q [%T]" $page $template .Page .Page }}
+  {{ end }}
+{{ end }}
+
+{{ if $src }}
   {{ $pageBundleResourceGlob := "" }}
   {{ $siteResourceGlob := "" }}
-
-  {{/* {{ $debug = or $debug (strings.Contains $resource "technology") }} */}}
 
   {{/* https://stackoverflow.com/a/74084154
   In branch bundles (directories with _index.md that contain leaf bundles, i.e., further sub directories that you want to render as pages)
@@ -18,15 +46,15 @@
   For leaf bundles (index.md) you can have resources in subfolders.
   I guess it is because every subfolder in branch bundles is supposed to be a page with resources (leaf bundle).
   Here is the source https://gohugo.io/content-management/page-bundles/ (see the table row Where can the Resources live?)
-  Discussion: https://discourse.gohugo.io/t/question-about-content-folder-structure/11822/7?u=kaushalmodi
-  */}}
+  Discussion: https://discourse.gohugo.io/t/question-about-content-folder-structure/11822/7?u=kaushalmodi */}}
+
   {{/* Ensure $pageBundleResourceGlob has an extension or ends in an asterisk */}}
-  {{ if (or (path.Ext $resource) (strings.HasSuffix $resource "*")) }}
-    {{ $pageBundleResourceGlob = $resource }}
-    {{ $siteResourceGlob = $resource }}
+  {{ if (or (path.Ext $src) (strings.HasSuffix $src "*")) }}
+    {{ $pageBundleResourceGlob = $src }}
+    {{ $siteResourceGlob = $src }}
   {{ else }}
-    {{ $pageBundleResourceGlob = printf "%s*" $resource }}
-    {{ $siteResourceGlob = printf "%s*" $resource }}
+    {{ $pageBundleResourceGlob = printf "%s*" $src }}
+    {{ $siteResourceGlob = printf "%s*" $src }}
   {{ end }}
 
   {{ $resourcePage := $page }}
@@ -34,7 +62,7 @@
   {{ if strings.HasPrefix $pageBundleResourceGlob "/" }}
 
     {{ $pathParts := split $pageBundleResourceGlob "/" }}
-    {{ if $debug }}{{ warnf "%s resource=%v begins with '/'. pathParts=%v"
+    {{ if $debug }}{{ warnf "%s src=%v begins with '/'. pathParts=%v"
         $dbg $pageBundleResourceGlob $pathParts }}{{ end }}
     {{ $pageBundleResourceGlobPrefix := $pageBundleResourceGlob }}
     {{ $pageBundleResourceGlobSuffix := "" }}
@@ -56,19 +84,19 @@
             {{ $otherPageArgs := merge $imageResourceArgs (dict
               "Page" $otherPage
               "OriginalPage" $originalPage
-              "resource" $pageBundleResourceGlobSuffix
+              "src" $pageBundleResourceGlobSuffix
             ) }}
-            {{ if $debug }}{{ warnf "%s resource=%v begins with '/'. Calling %s with otherPage=%v  RelPermalink=%s with otherPageArgs=%v"
+            {{ if $debug }}{{ warnf "%s src=%v begins with '/'. Calling %s with otherPage=%v  RelPermalink=%s with otherPageArgs=%v"
                 $dbg $pageBundleResourceGlob $template $otherPage $otherPage.RelPermalink $otherPageArgs }}{{ end }}
 
             {{ $res = partial $template $otherPageArgs }}
 
           {{ else }}
-            {{ if $debug }}{{ warnf "%s resource=%v begins with '/'. site.GetPage %v returned %v"
+            {{ if $debug }}{{ warnf "%s src=%v begins with '/'. site.GetPage %v returned %v"
                 $dbg $pageBundleResourceGlob $pageBundleResourceGlobPrefix $otherPage }}{{ end }}
           {{ end }}
         {{ else }}
-          {{ if $debug }}{{ warnf "%s resource=%v begins with '/'. splitRes=%v"
+          {{ if $debug }}{{ warnf "%s src=%v begins with '/'. splitRes=%v"
               $dbg $pageBundleResourceGlob $splitRes }}{{ end }}
         {{ end }}
       {{ end }}
@@ -192,8 +220,12 @@
       {{ with $resourcePage }}
         {{ with .BundleType }}
           {{ with $resourcePage.Resources.GetMatch $pageBundleResourceGlob }}
-            {{ if $debug }}{{ warnf "%s Found resource %s in page bundle %s matching %s" $dbg . $resourcePage $pageBundleResourceGlob }}{{ end }}
-            {{ $res = . }}
+            {{ if or (not $resourceType) (eq .ResourceType $resourceType) }}
+              {{ if $debug }}{{ warnf "%s Found resource %s in page bundle %s matching %s" $dbg . $resourcePage $pageBundleResourceGlob }}{{ end }}
+              {{ $res = . }}
+            {{ else }}
+              {{ if $debug }}{{ warnf "%s Found resource %s in page bundle %s matching %s but wrong .ResourceType=%s" $dbg . $resourcePage $pageBundleResourceGlob .ResourceType }}{{ end }}
+            {{ end }}
           {{ else }}
             {{ if $debug }}{{ warnf "%s No resource found in page bundle %s matching %s" $dbg $resourcePage $pageBundleResourceGlob }}{{ end }}
           {{ end }}
@@ -239,9 +271,11 @@
         {{ with $originalPage.File }}
           {{ $path := path.Join .Dir $pageBundleResourceGlob }}
           {{ with $resourcePage.Resources.GetMatch $path }}
-            {{ $res = . }}
-            {{ if $debug }}
-              {{ warnf "%s Found page resource at path=%s: res=%#v" $dbg $path $res }}
+            {{ if or (not $resourceType) (eq .ResourceType $resourceType) }}
+              {{ $res = . }}
+              {{ if $debug }}{{ warnf "%s Found page resource at path=%s: res=%#v" $dbg $path $res }}{{ end }}
+            {{ else }}
+              {{ if $debug }}{{ warnf "%s Found resource %s in page bundle %s matching %s but wrong .ResourceType=%s" $dbg . $resourcePage $path .ResourceType }}{{ end }}
             {{ end }}
           {{ else }}
             {{ if $debug }}{{ warnf "%s No page resource found at path=%s" $dbg $path }}{{ end }}
@@ -250,8 +284,12 @@
       {{ end }}
       {{ if not $res }}
         {{ with resources.GetMatch $siteResourceGlob }}
-          {{ $res = . }}
-          {{ if $debug }}{{ warnf "%s Found resource %s in site resources matching %s" $dbg . $siteResourceGlob }}{{ end }}
+          {{ if or (not $resourceType) (eq .ResourceType $resourceType) }}
+            {{ $res = . }}
+            {{ if $debug }}{{ warnf "%s Found resource %s in site resources matching %s" $dbg . $siteResourceGlob }}{{ end }}
+          {{ else }}
+            {{ if $debug }}{{ warnf "%s Found resource %s in site resources matching %s but wrong .ResourceType=%s" $dbg . $siteResourceGlob .ResourceType }}{{ end }}
+          {{ end }}          
         {{ else }}
           {{ if $debug }}{{ warnf "%s No resource found in site resources matching %s" $dbg $siteResourceGlob }}{{ end }}
         {{ end }}
@@ -262,7 +300,5 @@
       {{ end }}
     {{ end }}
   {{ end }}
-{{ else }}
-  {{ errorf "%s[%s] invalid .resource=%q [%T]" $page $template .resource .resource }}
 {{ end }}
 {{ return $res }}
