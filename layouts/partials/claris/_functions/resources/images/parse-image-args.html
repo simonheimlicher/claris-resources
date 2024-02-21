@@ -1,0 +1,131 @@
+
+{{ $template := "claris/_functions/resources/images/parse-image-args" }}
+{{ $page := default page .Page }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $dbg := printf "%s%s [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink)
+    (cond (not (or .src .resource)) "" (printf " %q" (or .src .resource)))
+    (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{/* All arguments */}}
+{{ $rawArgs := . }}
+{{/* Arguments to be parsed */}}
+{{ $validArgs := dict }}
+
+{{ $resourceArgNames := slice "src" "resource" }}
+{{ $dimensionArgNames := slice "sizespec" "width" "height" "aspect" "ratio" "aspectratio" "maxwidth" "maxheight" }}
+{{ $processingArgNames := slice "resource" "original" "target" "position" "method" "anchor" "format" "quality" }}
+{{ $srcSetArgNames := slice "format" "quality" "includeoriginal" "includeplaceholder" }}
+{{ range $k := union $resourceArgNames (union $dimensionArgNames (union $processingArgNames $srcSetArgNames) ) }}
+  {{ with (index $rawArgs $k) }}
+    {{ $validArgs = merge $validArgs (dict $k . ) }}
+  {{ end }}
+{{ end }}
+
+{{ if and false $debug }}
+  {{ warnf "%s Initial args:\n%v\nParsing validArgs:\n%v" $dbg
+  (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) )
+  (jsonify (dict "indent" "  ") $validArgs) }}
+{{ end }}
+
+{{/* Parsed arguments */}}
+{{ $parsedArgs := $validArgs }}
+
+{{ with $parsedArgs.src }}
+  {{ $imageResourceArgs := (dict "src" . "resourcetype" "image") }}
+  {{ $resource := partialCached "claris/_functions/resources/get-resource" (merge $imageResourceArgs (dict "Page" $page)) $imageResourceArgs }}
+  {{ $parsedArgs = merge $parsedArgs (dict
+    "src" nil
+  ) }}
+  {{ with $resource }}
+    {{ $parsedArgs = merge $parsedArgs (dict
+      "resource" $resource
+    ) }}
+  {{ else }}
+    {{ errorf "%s invalid 'src': no matching resource found. Initial args:\n%v\nimageResourceArgs:\n%v" $dbg
+      (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) )
+      (jsonify (dict "indent" "  ") $imageResourceArgs) }}
+  {{ end }}
+{{ end }}
+{{/* errorf "%s Missing required argument: either 'src' or 'resource' must be provided. Initial args:\n%v\nValid args:\n%v" $dbg
+    (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) )
+    (jsonify (dict "indent" "  ") $validArgs) */}}
+
+{{ $parsedArgs = partial "claris/_functions/resources/images/parse-image-dimensions" $parsedArgs }}
+{{ if and false $debug }}
+  {{ warnf "%s parsed dimensions: parsedArgs:\n%v" $dbg (jsonify (dict "indent" "  ") $parsedArgs) }}
+{{ end }}
+
+{{ $parsedArgs = partial "claris/_functions/resources/images/parse-image-format" $parsedArgs }}
+{{ if and false $debug }}
+  {{ warnf "%s parsed format: parsedArgs:\n%v" $dbg (jsonify (dict "indent" "  ") $parsedArgs) }}
+{{ end }}
+
+{{ if not $parsedArgs.alt }}
+  {{ $parsedArgs = partial "claris/_functions/resources/images/parse-image-alt" $parsedArgs }}
+  {{ if and false $debug }}
+    {{ warnf "%s parsed alt: parsedArgs:\n%v" $dbg (jsonify (dict "indent" "  ") $parsedArgs) }}
+  {{ end }}
+{{ end }}
+
+{{ if $debug }}
+  {{ warnf "%s Initial args:\n%v\nValid args:\n%v\nReturning parsedArgs:\n%v" $dbg
+  (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) )
+  (jsonify (dict "indent" "  ") $validArgs)
+  (jsonify (dict "indent" "  ") $parsedArgs) }}
+{{ end }}
+
+{{ return $parsedArgs }}
+
+{{ define "partials/claris/_functions/resources/images/parse-image-format" }}
+  {{ $template := "claris/_functions/resources/images/parse-image-format" }}
+  {{ $page := default page .Page }}
+  {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+  {{ $parsedArgs := . }}
+  {{ with .format }}
+    {{ if eq (printf "%T" . ) "string" }}
+      {{ $parsedArgs = merge $parsedArgs (dict "format" (dict "default" . ) ) }}
+      {{ if $debug }}
+        {{ warnf "%s override .format=%#v from .format=%v [%T]" $dbg $parsedArgs.format . . }}
+      {{ end }}
+    {{ end }}
+    {{ if $debug }}
+      {{ warnf "%s override .format=%#v from .format=%v [%T]" $dbg $parsedArgs.format . . }}
+    {{ end }}
+  {{ end }}
+  {{ return $parsedArgs }}
+{{ end }}
+
+{{ define "partials/claris/_functions/resources/images/parse-image-alt" }}
+  {{ $template := "claris/_functions/resources/images/parse-image-alt" }}
+  {{ $page := default page .Page }}
+  {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+  {{ $parsedArgs := . }}
+  {{ $minAltLength := 4 }}
+  {{ $imgAlt := $.alt }}
+  {{ if or (not $imgAlt) (lt (len $imgAlt) $minAltLength) }}
+    {{ with and ($.title) (ge (len $.title) $minAltLength) }}
+      {{ $imgAlt = . }}
+    {{ else }}
+      {{ with and $.caption (ge (len $.caption) $minAltLength) }}
+        {{ $imgAlt = . }}
+      {{ else }}
+        {{ with or $.src $.resource }}
+          {{ $imgAlt = path.BaseName . | humanize | replaceRE `(.*?) [0-9]+[xX][0-9]+(.*)` `$1$2` | strings.FirstUpper }}
+          {{ if $debug }}
+            {{ warnf "%s Generated 'alt' attribute imgAlt=%q from %v in parsedArgs:\n%v"
+                $dbg $imgAlt . (jsonify (dict "indent" " ") (merge $parsedArgs (dict "Page" nil) ) ) }}
+          {{ end }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+    {{ if or (not $imgAlt) (lt (len $imgAlt) $minAltLength) }}
+      {{ warnf "%s Failed to generate 'alt' attribute. None of alt|title|caption|resource found in parsedArgs:\n%v"
+          $dbg (jsonify (dict "indent" " ") (merge $parsedArgs (dict "Page" nil) ) ) }}
+    {{ end }}
+  {{ end }}
+  {{ return merge $parsedArgs (dict "alt" $imgAlt) }}
+{{ end }}

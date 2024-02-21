@@ -1,17 +1,18 @@
 {{ $template := "claris/_functions/resources/images/parse-image-dimensions" }}
-{{ $parsedDimensions := dict }}
+{{ $parsedArgs := dict }}
 {{ $page := default page .Page }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-{{/* {{- $debug = or $debug (findRE `feature-image|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
+{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
-{{ $img := .resource }}
+{{/* NOTE: The list of argument names must be kept in sync with template
+    "claris/_functions/resources/images/parse-image-args" */}}
+{{ $dimensionArgNames := slice "sizespec" "width" "height" "aspect" "ratio" "aspectratio" "maxwidth" "maxheight" }}
+{{ $img := false }}
 
 {{ $targetWidth := false }}
 {{ $targetHeight := false }}
 {{ $targetSizeSpec := false }}
 {{ $originalRatio := false }}
-{{ $targetDimensions := dict }}
 
 {{ $width := false }}
 {{ with .width }}
@@ -38,17 +39,32 @@
   {{ errorf "%s invalid .maxwidth=%v or .maxheight=%v" $dbg .maxwidth .maxheight }}
 {{ end }}
 
-{{ with $img }}
+{{ with $img = partialCached "claris/_functions/resources/images/is-image" .resource .resource }}
   {{ $originalRatio = div (cast.ToFloat .Width) (cast.ToFloat .Height) }}
   {{/* Constrain to original image dimensions */}}
   {{ $maxWidth = math.Min $maxWidth .Width | cast.ToInt }}
   {{ $maxHeight = math.Min $maxHeight .Height | cast.ToInt }}
 {{ end }}
 
-{{ $ratio := .ratio | cast.ToFloat }}
-{{ if or .aspect .aspectratio }}
-  {{ $ratio = partial "claris/_functions/resources/images/parse-aspect-ratio" . }}
+{{ $ratio := false }}
+{{ with .ratio }}
+  {{ $ratio = . }}
+{{ else }}
+  {{ if or .aspect .aspectratio }}
+    {{ $ratio = partial "claris/_functions/resources/images/parse-aspect-ratio" . }}
+  {{ end }}
 {{ end }}
+
+{{/* Drop raw dimension arguments */}}
+{{ $rawImageArgs := dict }}
+{{ range $k, $v := . }}
+  {{ if not (in $dimensionArgNames $k) }}
+    {{ $rawImageArgs = merge $rawImageArgs (dict $k $v) }}
+  {{ end }}
+{{ end }}
+
+{{/* Dict to hold the remaining dimension args after parsing */}}
+{{ $targetDimensions := dict }}
 
 {{/* First, we calculate the request dimensions, unconstrained by max width and max height */}}
 
@@ -119,7 +135,7 @@
   {{ $targetHeight = (math.Min $maxHeight $requestHeight) | math.Round | cast.ToInt }}
 {{ end }}
 
-{{ if $requestRatio }}
+{{ if and $img $requestRatio }}
 
   {{/* If requestRatio is specified, we need to update the width to match the constrained height or vice versa */}}
   {{ $constrainHorizontally := gt $requestRatio $originalRatio }}
@@ -174,10 +190,17 @@
 
 {{ else }}
   {{ if $debug }}
-    {{ warnf "%s original=[%dx%d, %.4g] initial request=[%dx%d%s] [args: %v]"
-      $dbg $img.Width $img.Height $originalRatio $requestWidth $requestHeight
-      (cond (not $requestRatio) "" (printf ", ratio=%.4g" $requestRatio) )
-      (delimit $argsList " ") }}
+    {{ if $img }}
+      {{ warnf "%s original=[%dx%d, %.4g] initial request=[%dx%d%s] [args: %v]"
+        $dbg $img.Width $img.Height $originalRatio $requestWidth $requestHeight
+        (cond (not $requestRatio) "" (printf ", ratio=%.4g" $requestRatio) )
+        (delimit $argsList " ") }}
+    {{ else }}
+      {{ warnf "%s initial request=[%dx%d%s] [args: %v]"
+        $dbg $requestWidth $requestHeight
+        (cond (not $requestRatio) "" (printf ", ratio=%.4g" $requestRatio) )
+        (delimit $argsList " ") }}
+    {{ end }}
   {{ end }}
 {{ end }}
 
@@ -222,8 +245,8 @@
   {{ end }}
 {{ end }}
 
-{{ $parsedDimensions = dict "target" $targetDimensions }}
-{{ with .resource }}
+{{ $parsedDimensions := dict "target" $targetDimensions }}
+{{ with $img }}
   {{ $parsedDimensions = merge $parsedDimensions (dict
     "original" (dict
       "width" .Width
@@ -232,4 +255,5 @@
     )
   ) }}
 {{ end }}
-{{ return $parsedDimensions }}
+{{ $parsedArgs = merge $rawImageArgs $parsedDimensions }}
+{{ return $parsedArgs }}

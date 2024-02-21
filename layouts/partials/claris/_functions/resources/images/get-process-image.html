@@ -1,36 +1,31 @@
-{{- $template := "claris/_functions/resources/images/get-process-image" }}
-{{- $processedImg := false }}
-{{- $page := default page .Page }}
-{{- $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-{{/* {{- $debug = or $debug (findRE `feature-image|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
-{{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
-{{- $processImageArgs := merge . (dict "Debug" $debug) }}
+{{ $template := "claris/_functions/resources/images/get-process-image" }}
+{{ $processedImg := false }}
+{{ $page := default page .Page }}
+{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+{{/* {{ $debug = or $debug (findRE `feature-image|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
+{{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $processImageArgs := merge . (dict "Page" nil "Debug" $debug) }}
 
-{{- $img := .resource }}
-{{- $resourceType := printf "%T" $img }}
-{{- if not (strings.Contains $resourceType "resources.resourceAdapter") }}
-  {{- $img = partialCached "claris/_functions/resources/get" $processImageArgs $processImageArgs }}
-  {{- $processImageArgs = merge $processImageArgs (dict
-    "resource" $img
-  ) }}
-  {{- $resourceType = printf "%T" $img }}
-{{- end }}
+{{ if or .src .resource }}
+  {{ with $img := partialCached "claris/_functions/resources/get-resource" (merge $processImageArgs (dict "Page" $page "resourcetype" "image") ) $processImageArgs }}
+    {{ $processImageArgs = merge $processImageArgs (dict
+      "src" nil
+      "resource" $img
+    ) }}
+    {{ with $processImageArgs.format }}
+      {{ if $debug }}
+        {{ warnf "%s overriding format=%v from .format=%v [%T]" $dbg . . . }}
+      {{ end }}
+    {{ end }}
+    {{ $processedImg = partialCached "claris/_functions/resources/images/process-image" (merge $processImageArgs (dict "Page" $page) ) $processImageArgs }}
+    {{ if $debug }}
+      {{ warnf "%s returning %T %vx%v: %v" $dbg $processedImg $processedImg.Width $processedImg.Height $processedImg }}
+    {{ end }}
+  {{ else }}
+    {{ errorf `%s invalid .src=%v [%T] .resource=%v [%T]` $dbg .src .src .resource .resource }}
+  {{ end }}
+{{ else }}
+  {{ errorf `%s need either .src=%v [%T] or .resource=%v [%T]` $dbg .src .src .resource .resource }}
+{{ end }}
 
-{{- if strings.Contains $resourceType "resources.resourceAdapter" }}
-
-  {{- $processedImg = partialCached "claris/_functions/resources/images/process-image" $processImageArgs (merge $processImageArgs (dict "Page" false)) }}
-
-{{- else }}
-
-  {{- errorf `%s invalid .resource=%v [%T]: must be of type "resources.resourceAdapter"` $dbg $img $img }}
-
-{{- end }}
-
-{{- if $debug }}
-  {{- warnf "%s returning %T %vx%v: %v" $dbg
-      $processedImg $processedImg.Width $processedImg.Height $processedImg }}
-{{- end }}
-{{- if not (strings.Contains (printf "%T" $processedImg) "resources.resourceAdapter" ) }}
-  {{- errorf "%s invalid result: %T: %v" $dbg $processedImg $processedImg }}
-{{- end }}
-{{- return $processedImg }}
+{{ return $processedImg }}

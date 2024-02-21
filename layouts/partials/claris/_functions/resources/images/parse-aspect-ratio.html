@@ -21,8 +21,10 @@
 {{/* .height: a number */}}
 {{- $height := .height }}
 
-{{- $targetRatio := cast.ToFloat $ratio }}
-{{- if not $targetRatio }}
+{{- $targetRatio := false }}
+{{ with .ratio }}
+  {{ $targetRatio = cast.ToFloat $ratio }}
+{{ else }}
   {{- with or
       (and $aspectRatio (strings.Contains $aspectRatio "x") $aspectRatio)
       (and $aspect      (strings.Contains $aspect "x")      $aspect) }}

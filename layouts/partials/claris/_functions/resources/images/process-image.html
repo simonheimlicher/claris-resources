@@ -1,13 +1,14 @@
 {{ $template := "claris/_functions/resources/images/process-image" }}
 {{ $processedImg := false }}
 {{ $page := default page .Page }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
-{{ $img := .resource }}
+{{ $img := false }}
 {{ $originalRatio := false }}
 
-{{ $processingArgNames := slice "resource" "format" "quality" }}
+{{/* Must be kept in sync with "claris/_functions/resources/images/parse-image-args" */}}
+{{ $processingArgNames := slice "resource" "original" "target" "position" "method" "anchor" "format" "quality" }}
 {{ $processImageArgs := (dict "Debug" $debug) }}
 {{ range $k, $v := . }}
   {{ with and $v (in $processingArgNames $k) }}
@@ -15,14 +16,28 @@
   {{ end }}
 {{ end }}
 
-{{ if (strings.Contains (printf "%T" $img) "resources.resourceAdapter" ) }}
+{{ with $processImageArgs.format }}
+  {{ if $debug }}
+    {{ warnf "%s .format=%v [%T]" $dbg . . }}
+  {{ end }}
+{{ end }}
+
+{{ with $processImageArgs.resource }}
+  {{ $img = partialCached "claris/_functions/resources/images/is-image" . . }}
+{{ else }}
+  {{ errorf `%s invalid .resource=%v [%T]: must be of type "*resources.resourceAdapter" and .ResourceType=%q must be "image"` $dbg $img $img $img.ResourceType }}
+{{ end }}
+
+{{ with $processImageArgs }}
 
   {{ $imgPosition := default false .position }}
 
-  {{ $dim := partial "claris/_functions/resources/images/parse-image-dimensions" . }}
+  {{/* Use existing `.original` and `.target` if `parse-image-dimensions` has already been called */}}
+  {{ $dim := . }}
+  {{ if not (and .original .target) }}
+    {{ $dim = partial "claris/_functions/resources/images/parse-image-dimensions" . }}
+  {{ end }}
   {{ $originalRatio = $dim.original.ratio }}
-  {{ $targetWidth := $dim.target.width }}
-  {{ $targetHeight := $dim.target.height }}
   {{ $targetRatio := $dim.target.ratio }}
 
   {{ $processImageArgs = merge $processImageArgs $dim.target }}
@@ -30,7 +45,7 @@
   {{ $aspectRatioTolerance := 0.0001 }}
   {{ $aspectRatioDeviation := false }}
 
-  {{ if $targetRatio }}
+  {{ if and $originalRatio $targetRatio }}
     {{ $aspectRatioDeviation = math.Pow (sub (div $originalRatio $targetRatio) 1) 2 }}
   {{ end }}
 
@@ -120,8 +135,8 @@
 
         {{ $ratioHeight := div $img.Width $targetRatio }}
         {{ if $debug }}
-          {{ warnf "%s posVertical=%v .Height=%v ratioHeight=%v targetHeight=%v"
-              $dbg $posVertical $img.Height $ratioHeight $targetHeight }}
+          {{ warnf "%s posVertical=%v .Height=%v ratioHeight=%v $dim.target.height=%v"
+              $dbg $posVertical $img.Height $ratioHeight $dim.target.height }}
         {{ end }}
 
         {{ if eq $posVertical 0.0 }}
@@ -161,8 +176,8 @@
 
         {{ $ratioWidth := mul $img.Height $targetRatio }}
         {{ if $debug }}
-          {{ warnf "%s posHorizontal=%v .Width=%v ratioWidth=%v targetWidth=%v"
-              $dbg $posHorizontal $img.Width $ratioWidth $targetWidth }}
+          {{ warnf "%s posHorizontal=%v .Width=%v ratioWidth=%v $dim.target.width=%v"
+              $dbg $posHorizontal $img.Width $ratioWidth $dim.target.width }}
         {{ end }}
 
         {{ if eq $posHorizontal 0.0 }}
@@ -217,11 +232,6 @@
 
     {{ end }}
   {{ end }}
-
-{{ else }}
-
-  {{ errorf `%s invalid .resource=%v [%T]: must be of type "*resources.resourceAdapter"` $dbg $img $img }}
-
 {{ end }}
 
 {{ if $debug }}
@@ -239,7 +249,7 @@
 {{ define "partials/claris/_functions/resources/images/process" }}
   {{ $template := "claris/_functions/resources/images/process-image" }}
   {{ $page := default page .Page }}
-  {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
   {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
   {{ $processedImg := .resource }}
 
@@ -256,6 +266,9 @@
     {{ end }}
 
     {{ with .format }}
+      {{ if $debug }}
+        {{ warnf "%s .format=%v [%T]" $dbg . . }}
+      {{ end }}
       {{ $supportedFormats := slice "gif" "jpeg" "png" "tiff" "webp" }}
       {{ if in $supportedFormats . }}
         {{ $processingArgsList = append . $processingArgsList }}
