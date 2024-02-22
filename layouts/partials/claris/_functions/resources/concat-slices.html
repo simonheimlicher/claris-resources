@@ -1,0 +1,30 @@
+{{ $concat := slice }}
+{{ $template := "claris/_functions/resources/concat-slices" }}
+{{ $debug := and false (page.Param "clarisdebug") }}
+{{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{ if reflect.IsSlice . }}
+  {{ range $i, $v := . }}
+    {{ if eq (printf "%T" $v ) "string" }}
+      {{ $v = split $v " " }}
+    {{ else if not (reflect.IsSlice $v) }}
+      {{ errorf "%s invalid element in slice at position %d: %v [type=%T]" $dbg $i $v $v }}
+      {{ $v = false }}
+    {{ end }}
+    {{ with $v }}
+      {{ range . }}
+        {{ with . }}
+          {{ $concat = append . $concat }}
+        {{ else }}
+          {{ if $debug }}
+            {{ warnf "%s ignoring empty string %q [type=%T]" $dbg . . }}
+          {{ end }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+{{ else }}
+  {{ errorf "%s invalid argument: expected a slice of slices or strings but got %#v [type=%T]" $dbg . . }}
+{{ end }}
+
+{{ return $concat }}

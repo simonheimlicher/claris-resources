@@ -2,8 +2,9 @@
 {{ $template := "claris/_functions/resources/get-resource" }}
 {{ $page := .Page }}
 {{ $originalPage := default .Page .OriginalPage }}
-{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
 {{ $imageResourceArgs := merge . (dict "Debug" $debug) }}
 
 {{ $resourceType := default "image" .resourcetype }}

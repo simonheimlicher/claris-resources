@@ -1,7 +1,8 @@
 {{- $imgSizesAttr := "" }}
-{{- $page := page }}
-{{- $debug := false }}
 {{- $template := "claris/_functions/resources/images/img-sizes-attr" }}
+{{- $page := page  }}
+{{- $debug := and false ($page.Param "clarisdebug") }}
+{{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{- $targetRelativeWidth := default 100 . }}
 {{- if reflect.IsMap . }}
@@ -22,28 +23,47 @@
     "20" 30
     "40" 40
   )
-  "oneColumn" 1
+  "oneColumn" 1.0
 ) -}}
 
 {{- $targetRelativeWidth = int $targetRelativeWidth }}
 {{- with $targetRelativeWidth }}
   {{- $imgSizesAttrList := slice }}
+  {{- $lastSizesWidth := 100 }}
   {{- range $breakpointID, $relativeWidthToWidth := $breakpointRelativeWidthToWidth }}
     {{- $sizesAttr := false }}
     {{- with $breakpointWidth := $page.Param (printf "responsive.breakpoints.width.%s" $breakpointID) }}
+      {{- $sizesWidth := false }}
       {{- if reflect.IsMap $relativeWidthToWidth }}
-        {{- range $relativeWidth, $width := $relativeWidthToWidth }}
-          {{- if and (not $sizesAttr) (ge $relativeWidth $targetRelativeWidth) }}
-            {{- $sizesAttr = printf `(min-width: %v) %vvw` $breakpointWidth $width }}
+        {{- range $relativeWidth, $overrideWidth := $relativeWidthToWidth }}
+          {{- if and (not $sizesWidth) (ge $relativeWidth $targetRelativeWidth) }}
+            {{- $sizesWidth = $overrideWidth }}
+            {{- if $debug }}
+              {{- warnf "%s breakpointID=%v breakpointWidth=%v targetRelativeWidth=%v: sizesWidth=%v based on overrideWidth=%v" $dbg
+                  $breakpointID $breakpointWidth $targetRelativeWidth $sizesWidth $overrideWidth }}
+            {{- end }}
           {{- end }}
         {{- end }}
       {{- else }}
-        {{- with (int $relativeWidthToWidth) }}
-          {{- $sizesAttr = printf `(min-width: %v) %vvw` $breakpointWidth (mul . $targetRelativeWidth) }}
+        {{- with (float $relativeWidthToWidth) }}
+          {{- $sizesWidth = int (math.Round (mul . $targetRelativeWidth) ) }}
+          {{- if $debug }}
+            {{- warnf "%s breakpointID=%v breakpointWidth=%v targetRelativeWidth=%v: sizesWidth=%v based on relativeWidthToWidth=%v" $dbg
+                $breakpointID $breakpointWidth $targetRelativeWidth $sizesWidth $relativeWidthToWidth }}
+          {{- end }}
         {{- else }}
-          {{- errorf "%v[%v]: invalid parameter for relative width: %v" $page $template $targetRelativeWidth }}
+          {{- errorf "%s breakpointID=%v breakpointWidth=%v: invalid parameter for targetRelativeWidth=%v: failed to cast relativeWidthToWidth=%v into float: %v"
+              $dbg $breakpointID $breakpointWidth $targetRelativeWidth $relativeWidthToWidth (int $relativeWidthToWidth)}}
         {{- end }}
       {{- end }}
+      {{- if lt $sizesWidth $lastSizesWidth }}
+        {{- $sizesAttr = printf `(min-width: %v) %vvw` $breakpointWidth $sizesWidth }}
+        {{- if $debug }}
+          {{- warnf "%s breakpointID=%v breakpointWidth=%v targetRelativeWidth=%v: adding sizesAttr=%q based on sizesWidth=%v > %v=lastSizesWidth" $dbg
+              $breakpointID $breakpointWidth $targetRelativeWidth $sizesAttr $sizesWidth $lastSizesWidth }}
+        {{- end }}
+      {{- end }}
+      {{- $lastSizesWidth = $sizesWidth }}
     {{- end }}
     {{- if $sizesAttr }}
       {{- $imgSizesAttrList = append $sizesAttr $imgSizesAttrList }}
@@ -51,7 +71,11 @@
   {{- end }}
   {{- $imgSizesAttr = delimit $imgSizesAttrList ", " }}
 {{- else }}
-  {{- errorf "%v[%v]: invalid parameter for relative width: %v" $page $template $targetRelativeWidth }}
+  {{- errorf "%s invalid parameter for relative width: %v" $dbg $targetRelativeWidth }}
 {{- end }}
 
+{{- if $debug }}
+  {{- warnf "%s targetRelativeWidth=%v: returning imgSizesAttr=%q based on breakpointRelativeWidthToWidth:\n%v" $dbg
+      $targetRelativeWidth $imgSizesAttr (jsonify (dict "indent" "  ") $breakpointRelativeWidthToWidth) }}
+{{- end }}
 {{- return $imgSizesAttr }}

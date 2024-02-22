@@ -1,9 +1,9 @@
 {{ $template := "claris/_functions/resources/images/image-srcset" }}
 {{ $imageFormatSrcsets := dict }}
 {{ $page := default page .Page }}
-{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
-{{ $imageResourceArgs := merge . (dict "Debug" $debug) }}
+{{ $imageResourceArgs := merge . (dict "resourcetype" "image" "Debug" $debug) }}
 
 {{ $maxWidth := int (default 1.0e9 .maxwidth) }}
 {{ $maxHeight := int (default 1.0e9 .maxheight) }}
@@ -25,30 +25,30 @@
       {{ if eq $k "default" }}
         {{ $defaultFormat = $v }}
         {{ if $debug }}
-          {{ warnf "%s override defaultFormat=%v based on .format=%v [type=%v]" $dbg
-              $defaultFormat $formatArg $formatArg }}
+          {{ warnf "%s override defaultFormat=%v based on .format=%v" $dbg
+              $defaultFormat $formatArg }}
         {{ end }}
       {{ else if eq $k "preferred" }}
         {{ $preferredFormat = $v }}
         {{ if $debug }}
-          {{ warnf "%s override preferredFormat=%v based on .format=%v [type=%v]" $dbg
-              $preferredFormat $formatArg $formatArg }}
+          {{ warnf "%s override preferredFormat=%v based on .format=%v" $dbg
+              $preferredFormat $formatArg }}
         {{ end }}
       {{ else if eq $k "intermediate" }}
         {{ $intermediateFormat = $v }}
         {{ if $debug }}
-          {{ warnf "%s override intermediateFormat=%v based on .format=%v [type=%v]" $dbg
-              $intermediateFormat $formatArg $formatArg }}
+          {{ warnf "%s override intermediateFormat=%v based on .format=%v" $dbg
+              $intermediateFormat $formatArg }}
         {{ end }}
       {{ else }}
-        {{ warnf "%s invalid key=%v with value=%v in .format=%v [type=%v]" $dbg
-            $k $v $formatArg $formatArg }}
+        {{ warnf "%s invalid key=%v with value=%v in .format=%v" $dbg
+            $k $v $formatArg }}
       {{ end }}
     {{ end }}
   {{ else }}
     {{ $defaultFormat = . }}
     {{ if $debug }}
-      {{ warnf "%s override defaultFormat=%v based on .format=%v [type=%v]" $dbg
+      {{ warnf "%s override defaultFormat=%v based on .format=%v" $dbg
           $defaultFormat . . }}
     {{ end }}
   {{ end }}
@@ -66,7 +66,11 @@
 
 {{/* {{ $envProd := partialCached "claris/_functions/is-build-environment" "prod" "prod" hugo.Environment }} */}}
 
-{{ $img := partialCached "claris/_functions/resources/get-resource" (merge $imageResourceArgs (dict "resourcetype" "image" "Page" $page) ) $imageResourceArgs }}
+{{/* FIXME: Apparently it is imperative to pass more than just $imageResourceArgs as cache buster.
+    Otherwise, subsequent invocations of this partial on the same page lead to the same resource
+    being re-used erroneously */}}
+{{ $img := partialCached "claris/_functions/resources/get-resource"
+  (merge $imageResourceArgs (dict "Page" $page) ) $imageResourceArgs $imageResourceArgs.resource $imageResourceArgs.src }}
 {{ if not $img }}
   {{ errorf "%s Failed to get image resource based on argument .resource=%v [type=%T] .src=%v [type=%T]" $dbg
       .resource .resource .src .src }}
@@ -76,7 +80,19 @@
 {{ $intermediateFormatBaseImg := false }}
 {{ with $img }}
   {{ $originalFormat = $img.MediaType.SubType }}
-  {{ $targetFormats = complement (slice $originalFormat) $targetFormats }}
+  {{ if in $targetFormats "original" }}
+    {{ $targetFormats = complement (slice $originalFormat) $targetFormats }}
+  {{ else if in $targetFormats $originalFormat }}
+    {{ $targetFormatsWithOriginal := slice }}
+    {{ range $targetFormats }}
+      {{ if eq $originalFormat . }}
+        {{ $targetFormatsWithOriginal = append "original" $targetFormatsWithOriginal }}
+      {{ else }}
+        {{ $targetFormatsWithOriginal = append . $targetFormatsWithOriginal }}
+      {{ end }}
+    {{ end }}
+    {{ $targetFormats = $targetFormatsWithOriginal }}
+  {{ end }}
   
   {{/* Crop the original image and use the result as the basis for all images of the srcset */}}
   {{/* FIXME: There appears to be a bug in Hugo up to and including v. 0.122.0:
@@ -84,8 +100,8 @@
        This implies that we need to create a separate intermediate image for every target format */}}
 
   {{ if $debug }}
-    {{ warnf "%s processing original=%v to intermediate=%v [targetFormats=%v]" $dbg
-        $originalFormat $intermediateFormat $targetFormats }}
+    {{ warnf "%s targetFormats=%v: processing original=%v to intermediate=%v" $dbg
+        $targetFormats $originalFormat $intermediateFormat }}
   {{ end }}
   {{ $intermediateFormatBaseImg = partial "claris/_functions/resources/images/process-image" (merge $imageResourceArgs  (dict
       "resource" $img
@@ -410,20 +426,25 @@
       {{ end }}
     {{ end }}
 
-    {{ if eq $resizedImg.MediaType.SubType $formatSpec }}
-      {{ $formatParams := (dict
-        "resource" $resizedImg
-        "format" $targetFormat
-        "srcset" (delimit $srcSetList `, `)
-        ) }}
-      {{ if or false $debug }}
-        {{ warnf "%s appending formatParams:\n%v"
-            $dbg (jsonify (dict "indent" "  ") $formatParams) }}
+    {{ with $resizedImg }}
+      {{ if eq .MediaType.SubType $formatSpec }}
+        {{ $formatParams := (dict
+          "resource" $resizedImg
+          "format" $targetFormat
+          "srcset" (delimit $srcSetList `, `)
+          ) }}
+        {{ if or false $debug }}
+          {{ warnf "%s appending formatParams:\n%v"
+              $dbg (jsonify (dict "indent" "  ") $formatParams) }}
+        {{ end }}
+        {{ $formatSrcsets = append (slice $formatParams) $formatSrcsets }}
+      {{ else }}
+        {{ errorf "%s BUG: failed to produce image with format=%v: .MediaType.SubType=%v"
+            $dbg $formatSpec $resizedImg.MediaType.SubType }}
       {{ end }}
-      {{ $formatSrcsets = append (slice $formatParams) $formatSrcsets }}
     {{ else }}
-      {{ errorf "%s BUG: failed to produce image matching formatSpec=%v: .MediaType.SubType=%v"
-          $dbg $formatSpec $resizedImg.MediaType.SubType }}
+      {{ errorf "%s failed to produce image with format=%v"
+          $dbg $formatSpec }}
     {{ end }}
   {{ end }}
 

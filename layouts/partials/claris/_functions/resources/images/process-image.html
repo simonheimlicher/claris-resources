@@ -1,8 +1,9 @@
 {{ $template := "claris/_functions/resources/images/process-image" }}
 {{ $processedImg := false }}
 {{ $page := default page .Page }}
-{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $supportedFormats := slice "gif" "jpeg" "png" "tiff" "webp" }}
 
 {{ $img := false }}
 {{ $originalRatio := false }}
@@ -16,19 +17,25 @@
   {{ end }}
 {{ end }}
 
-{{ with $processImageArgs.format }}
-  {{ if $debug }}
-    {{ warnf "%s .format=%v [%T]" $dbg . . }}
+{{ with $processImageArgs.resource }}
+  {{ with $img = partialCached "claris/_functions/resources/images/is-image" . . }}
+  {{ else }}
+    {{ errorf `%s invalid .resource=%v [%T]` $dbg . . }}
   {{ end }}
 {{ end }}
 
-{{ with $processImageArgs.resource }}
-  {{ $img = partialCached "claris/_functions/resources/images/is-image" . . }}
-{{ else }}
-  {{ errorf `%s invalid .resource=%v [%T]: must be of type "*resources.resourceAdapter" and .ResourceType=%q must be "image"` $dbg $img $img $img.ResourceType }}
+{{ with $processImageArgs.format }}
+  {{ if in $supportedFormats . }}
+    {{ if $debug }}
+      {{ warnf "%s .format=%v [%T]" $dbg . . }}
+    {{ end }}
+  {{ else }}
+    {{ $img = false }}
+    {{ errorf "%s invalid .format: %q" $dbg . }}
+  {{ end }}
 {{ end }}
 
-{{ with $processImageArgs }}
+{{ with and $img $processImageArgs }}
 
   {{ $imgPosition := default false .position }}
 
@@ -234,14 +241,15 @@
   {{ end }}
 {{ end }}
 
-{{ if $debug }}
-  {{ warnf "%s returning %v[%dx%d ratio=%.4g] from %v[%dx%d ratio=%.4g] with args: %#v" $dbg
-      $processedImg.MediaType
-      $processedImg.Width $processedImg.Height
-      (div (cast.ToFloat $processedImg.Width) (cast.ToFloat $processedImg.Height) )
-      $img.MediaType $img.Width $img.Height $originalRatio $processImageArgs }}
-{{ end }}
-{{ if not (strings.Contains (printf "%T" $processedImg) "resources.resourceAdapter" ) }}
+{{ with partialCached "partials/claris/_functions/resources/images/is-image" $processedImg $processedImg }}
+  {{ if $debug }}
+    {{ warnf "%s returning %v[%dx%d ratio=%.4g] from %v[%dx%d ratio=%.4g] with args: %#v" $dbg
+        $processedImg.MediaType
+        $processedImg.Width $processedImg.Height
+        (div (cast.ToFloat $processedImg.Width) (cast.ToFloat $processedImg.Height) )
+        $img.MediaType $img.Width $img.Height $originalRatio $processImageArgs }}
+  {{ end }}
+{{ else }}
   {{ errorf "%s invalid result: %T: %v" $dbg $processedImg $processedImg }}
 {{ end }}
 {{ return $processedImg }}
@@ -249,7 +257,7 @@
 {{ define "partials/claris/_functions/resources/images/process" }}
   {{ $template := "claris/_functions/resources/images/process-image" }}
   {{ $page := default page .Page }}
-  {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
   {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
   {{ $processedImg := .resource }}
 
@@ -266,15 +274,7 @@
     {{ end }}
 
     {{ with .format }}
-      {{ if $debug }}
-        {{ warnf "%s .format=%v [%T]" $dbg . . }}
-      {{ end }}
-      {{ $supportedFormats := slice "gif" "jpeg" "png" "tiff" "webp" }}
-      {{ if in $supportedFormats . }}
-        {{ $processingArgsList = append . $processingArgsList }}
-      {{ else }}
-        {{ errorf "%s invalid format: %q" $dbg . }}
-      {{ end }}
+      {{ $processingArgsList = append . $processingArgsList }}
     {{ end }}
     
     {{ with .quality }}

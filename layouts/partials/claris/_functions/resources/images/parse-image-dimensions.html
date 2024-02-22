@@ -1,7 +1,7 @@
 {{ $template := "claris/_functions/resources/images/parse-image-dimensions" }}
 {{ $parsedArgs := dict }}
 {{ $page := default page .Page }}
-{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{/* NOTE: The list of argument names must be kept in sync with template
@@ -80,7 +80,7 @@
 
 {{ if $requestWidth }}
   {{ if $requestHeight }}
-    {{/* When both width and height are given, we potentially change the aspect ratio, 
+    {{/* When both width and height are given, we potentially change the aspect ratio,
         hence we calculate the targeting requestRatio as if it had been passed in */}}
     {{ $requestRatio = div (mul 1.0 $requestWidth) $requestHeight }}
   {{ else }}
@@ -147,12 +147,12 @@
       $constrainString $maxWidth $maxHeight
       (delimit $argsList " ") }}
   {{ end }}
-  
+
   {{ if $constrainHorizontally }}
-    {{/* Request aspect is wider than original, hence we need to constrain 
+    {{/* Request aspect is wider than original, hence we need to constrain
       targeting dimensions to *width* of original image. */}}
-      {{/* If requestWidth is defined, targetWidth has already been constrained above. 
-      However, if requestHeight has been specified, we need to constrain it 
+      {{/* If requestWidth is defined, targetWidth has already been constrained above.
+      However, if requestHeight has been specified, we need to constrain it
       such that the targeting width does not exceed the original width */}}
       {{ if $requestHeight }}
         {{ $targetWidth = (math.Min $targetWidth (mul $img.Height $requestRatio) ) | math.Round | cast.ToInt }}
@@ -168,10 +168,10 @@
       {{/* Update targetHeight to match constrained targetWidth */}}
       {{ $targetHeight = (div $targetWidth $requestRatio) | math.Round | cast.ToInt }}
   {{ else }}
-    {{/* Request aspect is narrower than original, hence we need to constrain 
+    {{/* Request aspect is narrower than original, hence we need to constrain
       targeting dimensions to *height* of original image.
-      If requestHeight is defined, targetHeight has already been constrained above. 
-      However, if requestWidth has been specified, we need to constrain it 
+      If requestHeight is defined, targetHeight has already been constrained above.
+      However, if requestWidth has been specified, we need to constrain it
       such that the targeting height does not exceed the original height */}}
       {{ if $requestHeight }}
         {{ $targetHeight = (math.Min $targetHeight (div $img.Width $requestRatio) ) | math.Round | cast.ToInt }}
@@ -223,7 +223,7 @@
     "height" $targetHeight
     "sizespec" $targetSizeSpec) }}
 {{ else }}
-  {{ errorf "%s invalid arguments: request=%vx%v, ratio=%v target=%vx%v %v" $dbg 
+  {{ errorf "%s invalid arguments: request=%vx%v, ratio=%v target=%vx%v %v" $dbg
   $requestWidth $requestHeight $requestRatio
   (cond (not $targetWidth) "" $targetWidth) (cond (not $targetHeight) "" $targetHeight)
   (jsonify (dict "indent" "  ") . ) }}

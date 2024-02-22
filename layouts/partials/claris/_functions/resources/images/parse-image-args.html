@@ -79,7 +79,7 @@
 {{ define "partials/claris/_functions/resources/images/parse-image-format" }}
   {{ $template := "claris/_functions/resources/images/parse-image-format" }}
   {{ $page := default page .Page }}
-  {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
   {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
   {{ $parsedArgs := . }}
