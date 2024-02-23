@@ -1,14 +1,7 @@
 {{- $template := "claris/_functions/resources/images/parse-aspect-ratio" }}
 {{- $page := default page .Page }}
 {{- $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-{{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
-{{- $aspectParams := dict }}
-{{- range $k, $v := . }}
-  {{- if and $v (not (in (slice "Page" "version" "alt" "title") $k) ) }}
-    {{- $aspectParams = merge $aspectParams (dict $k $v) }}
-  {{- end }}
-{{- end }}
 {{- $resource := .resource }}
 {{/* .aspectratio: either a number or two numbers separated by the letter `x` */}}
 {{- $aspectRatio := .aspectratio }}
@@ -22,8 +15,8 @@
 {{- $height := .height }}
 
 {{- $targetRatio := false }}
-{{ with .ratio }}
-  {{ $targetRatio = cast.ToFloat $ratio }}
+{{ with $ratio }}
+  {{ $targetRatio = cast.ToFloat . }}
 {{ else }}
   {{- with or
       (and $aspectRatio (strings.Contains $aspectRatio "x") $aspectRatio)
@@ -46,10 +39,18 @@
 
 {{- if $targetRatio }}
   {{- if $debug }}
+    {{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
     {{- warnf "%s .width=%v .height=%v .aspect=%v .ratio=%v .aspectratio=%v --> targetRatio=%v"
         $dbg .width .height .aspect .ratio .aspectratio $targetRatio }}
   {{- end }}
 {{- else }}
+  {{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+  {{- $aspectParams := dict }}
+  {{- range $k, $v := . }}
+    {{- if and $v (not (in (slice "Page" "version" "alt" "title") $k) ) }}
+      {{- $aspectParams = merge $aspectParams (dict $k $v) }}
+    {{- end }}
+  {{- end }}
   {{- errorf "%s Cannot determine targetRatio based on arguments:\n%v"
       $dbg (jsonify (dict "indent" "  ") $aspectParams) }}
 {{- end }}

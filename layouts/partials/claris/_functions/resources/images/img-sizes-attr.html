@@ -14,6 +14,7 @@
   {{- end }}
 {{- end }}
 
+{{- $relativeWidths := slice 20 30 40 50 60 }}
 {{- $breakpointRelativeWidthToWidth := (dict
   "mobile" (dict
     "60" 70
@@ -27,7 +28,7 @@
 ) -}}
 
 {{- $targetRelativeWidth = int $targetRelativeWidth }}
-{{- with $targetRelativeWidth }}
+{{- if in $relativeWidths $targetRelativeWidth }}
   {{- $imgSizesAttrList := slice }}
   {{- $lastSizesWidth := 100 }}
   {{- range $breakpointID, $relativeWidthToWidth := $breakpointRelativeWidthToWidth }}
@@ -56,8 +57,8 @@
               $dbg $breakpointID $breakpointWidth $targetRelativeWidth $relativeWidthToWidth (int $relativeWidthToWidth)}}
         {{- end }}
       {{- end }}
-      {{- if lt $sizesWidth $lastSizesWidth }}
-        {{- $sizesAttr = printf `(min-width: %v) %vvw` $breakpointWidth $sizesWidth }}
+      {{- if and (eq (printf "%T" $sizesWidth) "int" ) (gt $sizesWidth 0) (lt $sizesWidth $lastSizesWidth) }}
+        {{- $sizesAttr = printf `(min-width: %v) %dvw` $breakpointWidth $sizesWidth }}
         {{- if $debug }}
           {{- warnf "%s breakpointID=%v breakpointWidth=%v targetRelativeWidth=%v: adding sizesAttr=%q based on sizesWidth=%v > %v=lastSizesWidth" $dbg
               $breakpointID $breakpointWidth $targetRelativeWidth $sizesAttr $sizesWidth $lastSizesWidth }}
@@ -71,7 +72,8 @@
   {{- end }}
   {{- $imgSizesAttr = delimit $imgSizesAttrList ", " }}
 {{- else }}
-  {{- errorf "%s invalid parameter for relative width: %v" $dbg $targetRelativeWidth }}
+  {{- errorf "%s invalid parameter for relative width: %v. Must be in %v" $dbg
+      $targetRelativeWidth $relativeWidths }}
 {{- end }}
 
 {{- if $debug }}

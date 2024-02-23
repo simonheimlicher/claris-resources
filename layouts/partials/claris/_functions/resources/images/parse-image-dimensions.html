@@ -5,7 +5,7 @@
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{/* NOTE: The list of argument names must be kept in sync with template
-    "claris/_functions/resources/images/parse-image-args" */}}
+    "claris/_functions/resources/images/parse-args" */}}
 {{ $dimensionArgNames := slice "sizespec" "width" "height" "aspect" "ratio" "aspectratio" "maxwidth" "maxheight" }}
 {{ $img := false }}
 
@@ -48,7 +48,7 @@
 
 {{ $ratio := false }}
 {{ with .ratio }}
-  {{ $ratio = . }}
+  {{ $ratio = cast.ToFloat . }}
 {{ else }}
   {{ if or .aspect .aspectratio }}
     {{ $ratio = partial "claris/_functions/resources/images/parse-aspect-ratio" . }}

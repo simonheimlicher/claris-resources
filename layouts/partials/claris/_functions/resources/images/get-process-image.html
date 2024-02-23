@@ -4,10 +4,11 @@
 {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{/* {{ $debug = or $debug (findRE `feature-image|time-machine-volume-uuid|about` $page.RelPermalink) }} */}}
 {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
-{{ $processImageArgs := merge . (dict "Page" nil "Debug" $debug) }}
+{{ $processImageArgs := merge . (dict "Page" nil "Debug" $debug "resourcetype" "image") }}
 
 {{ if or .src .resource }}
-  {{ with $img := partialCached "claris/_functions/resources/get-resource" (merge $processImageArgs (dict "Page" $page "resourcetype" "image") ) $processImageArgs }}
+  {{ with $img := partialCached "claris/_functions/resources/get-resource"
+      (merge $processImageArgs (dict "Page" $page) ) $processImageArgs }}
     {{ $processImageArgs = merge $processImageArgs (dict
       "src" nil
       "resource" $img
@@ -17,9 +18,12 @@
         {{ warnf "%s overriding format=%v from .format=%v [%T]" $dbg . . . }}
       {{ end }}
     {{ end }}
-    {{ $processedImg = partialCached "claris/_functions/resources/images/process-image" (merge $processImageArgs (dict "Page" $page) ) $processImageArgs }}
+    {{ $processedImg = partialCached "claris/_functions/resources/images/process-image"
+        (merge $processImageArgs (dict "Page" $page) ) $processImageArgs }}
     {{ if $debug }}
-      {{ warnf "%s returning %T %vx%v: %v" $dbg $processedImg $processedImg.Width $processedImg.Height $processedImg }}
+      {{ warnf "%s processImageArgs:\n%v\nReturning %v[%vx%v]: %v" $dbg
+          (jsonify (dict "indent" "  ") $processImageArgs)
+          $processedImg.MediaType $processedImg.Width $processedImg.Height $processedImg }}
     {{ end }}
   {{ else }}
     {{ errorf `%s invalid .src=%v [%T] .resource=%v [%T]` $dbg .src .src .resource .resource }}
