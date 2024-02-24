@@ -1,0 +1,155 @@
+{{ $template := "claris/_functions/resources/images/gather-image-attributes" }}
+{{ $page := default page .Page }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{ $imageAttributes := dict }}
+{{ $defaultVariantName := "default" }}
+
+{{ $sourceAttributeNames := slice "sizes" "media" "style" }}
+{{ $sourceAttributeNamesImg := slice "alt" "title" "class" "lightbox" }}
+
+{{ $variantImgBaseArgs := dict }}
+{{ $variantSrcSetArgs := dict }}
+{{ $variants := dict }}
+
+{{ $parsedArgs := dict }}
+{{ with $parsedArgs = partial "claris/_functions/resources/images/parse-args"
+    (merge . (dict "structured" true) ) (merge . (dict "Page" nil) ) -}}
+
+  {{ with .container.figureclass }}
+    {{ $figureAttr := dict "class" (union $parsedArgs.container.containerclass . ) }}
+    {{ with $parsedArgs.container.caption }}
+      {{ $figureAttr = merge $figureAttr (dict "caption" . ) }}
+    {{ end }}
+    {{ $imageAttributes = merge $imageAttributes (dict "figure" $figureAttr ) }}
+    {{ if $debug }}
+      {{ warnf "%s figureAttr=%#v figure=%#v" $dbg $figureAttr $imageAttributes.figure }}
+    {{ end }}
+  {{ else }}
+    {{ with .container.containerclass slice }}
+      {{ $imageAttributes = merge $imageAttributes (dict "picture" (dict "class" . ) ) }}
+      {{ warnf "%s picture=%#v" $dbg $imageAttributes.picture }}
+    {{ end }}
+  {{ end }}
+
+  {{ $variants = merge $variants (dict $defaultVariantName . ) }}
+
+  {{ if $debug }}
+    {{ warnf "%s gathering image attributes for variants:\n%v"
+        $dbg (jsonify (dict "indent" "  ") $variants ) }}
+  {{ end }}
+
+  {{/* FIXME: This needs to be changed once multiple variants are to be supported */}}
+  {{ with .image }}
+    {{ $variantSrcSetArgs = merge $variantSrcSetArgs . }}
+  {{ end }}
+  {{ with .processing }}
+    {{ $variantSrcSetArgs = merge $variantSrcSetArgs . }}
+  {{ end }}
+
+{{ end }}
+
+{{ range $variantName, $variantMeta := $variants }}
+
+  {{ $variantAttributes := merge $variantImgBaseArgs (dict "variant" $variantName) }}
+
+  {{ $variantSrcSets := dict }}
+  {{ with $variantSrcSetArgs }}
+    {{ if (or .src .resource) }}
+
+      {{ if and false $debug }}
+        {{ warnf "%s calling image-srcset with variantSrcSetArgs:\n%v" $dbg
+            (jsonify (dict "indent" "  ") (merge $variantSrcSetArgs
+              (dict "resource" (printf "%s [%s]" $variantSrcSetArgs.resource.Name
+                $variantSrcSetArgs.resource.MediaType)))) }}
+      {{ end }}
+
+      {{ with $variantSrcSets = partialCached "claris/_functions/resources/images/image-srcset"
+          (merge $variantSrcSetArgs (dict "Page" $page) ) $variantSrcSetArgs }}
+        {{ if and false $debug }}
+          {{ warnf "%s image-srcset with variantSrcSetArgs:\n%v\nreturned variantSrcSets:\n%v" $dbg
+              (jsonify (dict "indent" "  ") (merge $variantSrcSetArgs
+                (dict "resource" (printf "%s [%s]" $variantSrcSetArgs.resource.Name
+                  $variantSrcSetArgs.resource.MediaType))))
+              (jsonify (dict "indent" "  ") $variantSrcSets) }}
+        {{ end }}
+      {{ else }}
+        {{ errorf "%s failed to get srcSet with variantSrcSetArgs:\n%v" $dbg
+            (jsonify (dict "indent" "  ") $variantSrcSetArgs) -}}
+      {{ end }}
+
+    {{ else }}
+
+      {{ errorf "%s missing image resource=%#v.\n\nDid you pass the path to an image resource with the argument src=%v?\n\nParsed arguments for variant=%v:\n%v" $dbg
+          .resource .src $variantName (jsonify (dict "indent" "  ") $variantSrcSetArgs) -}}
+
+    {{ end }}
+  {{ end }}
+
+  {{ with $variantSrcSets }}
+
+    {{ if $debug }}
+      {{ warnf "%s generated variantSrcSets:\n%v" $dbg (jsonify (dict "indent" "  ") $variantSrcSets) }}
+    {{ end }}
+
+    {{ $styleAttr := false }}
+    {{ with $variantMeta.image.position }}
+      {{ $styleAttr = printf "object-fit: cover; object-position: %s" . }}
+    {{ end }}
+
+    {{ $lastSourceIdx := sub (len .formats) 1 }}
+    {{/* If there are multiple sources, all up to the last one are rendered as `source` elements */}}
+    {{ $elementName := "source" }}
+    {{ if $debug }}
+      {{ warnf "%s adding attributes for variant=%v:\n%v" $dbg $variantName (jsonify (dict "indent" "  ") . ) }}
+    {{ end }}
+
+    {{ $sources := slice }}
+    {{ range $formatIdx, $formatSrcSet := .formats }}
+      {{ if $debug }}
+        {{ warnf "%s adding attributes for rendering to formatSrcSet:\n%v" $dbg
+          (jsonify (dict "indent" "  ") (merge .
+            (dict "resource" (printf "%s [%s]" .resource.Name .resource.MediaType) ) ) ) }}
+      {{ end }}
+
+      {{/* The `img` element must always be last element within `picture` */}}
+      {{ if eq $formatIdx $lastSourceIdx }}
+        {{ $elementName = "img" }}
+      {{ end }}
+      {{ $sourceAttributes := merge (dict "elementname" $elementName) $formatSrcSet }}
+      {{ $attributeNames := $sourceAttributeNames }}
+      {{ if eq $elementName "img" }}
+        {{ $attributeNames = append $sourceAttributeNamesImg $attributeNames }}
+      {{ end }}
+      {{ range $k, $v := $variantMeta.image }}
+        {{ if in $attributeNames $k }}
+          {{ $sourceAttributes = merge $sourceAttributes (dict $k $v) }}
+        {{ end }}
+      {{ end }}
+      {{ if $debug }}
+        {{ warnf "%s adding HTML %q element as source %d of %d:\n%v" $dbg
+            $elementName (add $formatIdx 1) (len $variantSrcSets.formats)
+            (jsonify (dict "indent" "  ") . ) }}
+      {{ end }}
+      {{ $sources = append $sourceAttributes $sources }}
+    {{ end }}
+    {{ $variantAttributes = merge $variantAttributes (dict "sources" $sources)  }}
+
+    {{ if $debug }}
+      {{ warnf "%s adding variantAttributes for variant=%v:\n%v" $dbg
+          $variantAttributes.variant (jsonify (dict "indent" "  ") $variantAttributes ) }}
+    {{ end }}
+
+    {{ $imageAttributes = merge $imageAttributes (dict $variantName $variantAttributes) }}
+
+  {{ end }}
+
+{{ end }}
+
+{{ if $debug }}
+  {{ warnf "%s returning imageAttributes:\n%v" $dbg (jsonify (dict "indent" "  ") $imageAttributes ) }}
+{{ end }}
+
+
+{{ return $imageAttributes }}
