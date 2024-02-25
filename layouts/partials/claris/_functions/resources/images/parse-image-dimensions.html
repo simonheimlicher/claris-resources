@@ -4,6 +4,7 @@
 {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
+{{ $args := merge $ (dict "Page" nil) }}
 {{/* NOTE: The list of argument names must be kept in sync with template
     "claris/_functions/resources/images/parse-args" */}}
 {{ $dimensionArgNames := slice "sizespec" "width" "height" "aspect" "ratio" "aspectratio" "maxwidth" "maxheight" }}
@@ -57,7 +58,7 @@
 
 {{/* Drop raw dimension arguments */}}
 {{ $rawImageArgs := dict }}
-{{ range $k, $v := . }}
+{{ range $k, $v := $args }}
   {{ if not (in $dimensionArgNames $k) }}
     {{ $rawImageArgs = merge $rawImageArgs (dict $k $v) }}
   {{ end }}

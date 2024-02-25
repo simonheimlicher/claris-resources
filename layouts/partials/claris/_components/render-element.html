@@ -1,0 +1,46 @@
+{{- $template := "claris/_components/render-element" }}
+{{- $page := default page .Page }}
+{{- $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{- $elementName := false }}
+{{- with $elementName = .name }}
+  {{- if $debug }}
+    {{- warnf "%s Add element with name=%q with attr:\n%v"
+        $dbg $elementName (jsonify (dict "indent" "  ") $.attr ) }}
+  {{- end }}
+  {{ printf "<%s" $elementName | safeHTML }}
+{{- end }}
+
+{{- with and $debug .attr }}
+  {{- warnf "%s adding %d attr:\n%v" $dbg (len . ) (jsonify (dict "indent" "  ") . ) }}
+{{- end }}
+{{- $maxAttrLen := 10 }}
+{{- range $attrName, $attrValue := .attr }}
+  {{- if and false $debug }}
+    {{- warnf "%s adding attr=%v:\n%v" $dbg $attrName (jsonify (dict "indent" "  ") . ) }}
+  {{- end }}
+  {{- if reflect.IsSlice $attrValue }}
+    {{- printf "\n%*s=%q" $maxAttrLen $attrName (delimit $attrValue " " | safeHTMLAttr) | safeHTML }}
+  {{- else }}
+    {{- printf "\n%*s=%q" $maxAttrLen $attrName (printf "%v" $attrValue) | safeHTML }}
+  {{- end }}
+{{- end -}}
+  >
+{{- if or .children .content }}
+  {{- with .children }}
+    {{- if $debug }}
+      {{- warnf "%s rendering %d children:\n%v" $dbg (len . ) (jsonify (dict "indent" "  ") . ) }}
+    {{- end }}
+    {{- range $childIdx, $childElement := . }}
+      {{- partialCached "claris/_components/render-element" (merge . (dict "index" $childIdx "Page" $page) ) . }}
+    {{- end }}
+  {{- end }}
+  {{- with .content }}
+    {{- if $debug }}
+      {{- warnf "%s rendering content:\n%v" $dbg . }}
+    {{- end }}
+    {{- safeHTML . }}
+  {{- end }}
+  {{- printf "</%s>" $elementName | safeHTML }}
+{{- end -}}
