@@ -194,6 +194,7 @@
     {{ $captionElement := (dict
       "name" "figcaption"
       "content" ($page.RenderString . )
+      "attr" (dict "class" (slice "caption font-meta"))
     ) }}
     {{ $containerChildren = append $captionElement $containerChildren }}
   {{ end }}
