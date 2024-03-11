@@ -182,11 +182,11 @@
       Either `picture` or `img` */}}
   {{ with $containerArgs.containerclass }}
     {{ $containerClass = append . $containerClass | uniq }}
-    {{ with $containerArgs.figureclass }}
-      {{/* As there is a `figureclass`, we use a `figure` element as the container */}}
-      {{ $containerElementName = "figure" }}
-      {{ $containerClass = append . $containerClass | uniq }}
-    {{ end }}
+  {{ end }}
+  {{ with $containerArgs.figureclass }}
+    {{/* As there is a `figureclass`, we use a `figure` element as the container */}}
+    {{ $containerElementName = "figure" }}
+    {{ $containerClass = append . $containerClass | uniq }}
   {{ end }}
   {{ with $containerArgs.caption }}
     {{/* As there is a `caption` attribute, we use a `figure` element as the container */}}
@@ -200,7 +200,9 @@
   {{ end }}
 {{ end }}
 
-{{ $containerAttr = (merge $containerAttr (dict "class" $containerClass) ) }}
+{{ with $containerClass }}
+  {{ $containerAttr = (merge $containerAttr (dict "class" . ) ) }}
+{{ end }}
 {{ if $debug }}
   {{ warnf "%s containerElement=%v: attr:\n%v\nchildren:\n%v" $dbg
       $containerElementName
