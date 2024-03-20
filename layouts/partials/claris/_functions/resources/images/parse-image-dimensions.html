@@ -246,7 +246,12 @@
   {{ end }}
 {{ end }}
 
-{{ $parsedDimensions := dict "target" $targetDimensions }}
+{{ $parsedDimensions := dict }}
+
+{{ with $targetDimensions }}
+  {{ $parsedDimensions = merge $parsedDimensions (dict "target" . ) }}
+{{ end }}
+
 {{ with $img }}
   {{ $parsedDimensions = merge $parsedDimensions (dict
     "original" (dict
@@ -256,5 +261,6 @@
     )
   ) }}
 {{ end }}
+
 {{ $parsedArgs = merge $rawImageArgs $parsedDimensions }}
 {{ return $parsedArgs }}

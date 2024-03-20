@@ -15,13 +15,12 @@
 {{ $sourceAttributeNames := slice "sizes" "media" "style" }}
 {{ $sourceAttributeNamesImg := slice "alt" "title" "class" "data-zoomable" }}
 
-{{ $args := merge . (dict "Page" $page "structured" true)}}
 {{ $parsedArgs := partialCached "claris/_functions/resources/images/parse-args"
-    $args (merge $args (dict "Page" nil) ) }}
+     (merge $ (dict "Page" $page) ) (merge $ (dict "Page" nil) ) }}
 
 {{ if $debug }}
   {{ warnf "%s called parse-args with:\n%v\nNow generating attributes for render-image with parsedArgs:\n%v" $dbg
-      (jsonify (dict "indent" "  ") (merge $args (dict "Page" "omitted"
+      (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
         "resource" (cond (not .resource) .resource (printf "%v [%v]" .resource .resource.MediaType) )) ) )
       (jsonify (dict "indent" "  ") $parsedArgs) }}
 {{ end }}
@@ -38,42 +37,43 @@
   {{ end }}
   {{ $variants := dict $defaultVariantName . }}
 
-  {{ if and false $debug }}
-    {{ warnf "%s gathering image source children for variants:\n%v"
+  {{ if and true $debug }}
+    {{ warnf "%s gathering source child elements for variants:\n%v"
         $dbg (jsonify (dict "indent" "  ") $variants ) }}
   {{ end }}
 
   {{ range $variantName, $variantMeta := $variants }}
-
     {{ $variantSrcSets := dict }}
-    {{ with $variantSrcSetArgs }}
-      {{ if (or .src .resource) }}
+    {{ range $versionID, $versionMeta := $variantMeta.image.version }}
 
-        {{ if and false $debug }}
-          {{ warnf "%s calling image-srcset with variantSrcSetArgs:\n%v" $dbg
-              (jsonify (dict "indent" "  ") (merge $variantSrcSetArgs
-                (dict "resource" (printf "%s [%s]" $variantSrcSetArgs.resource.Name
-                  $variantSrcSetArgs.resource.MediaType)))) }}
+      {{ $versionSrcSetArgs := merge $variantSrcSetArgs $versionMeta }}
+      {{ if $versionMeta.resource }}
+        {{ if $debug }}
+          {{ warnf "%s calling image-srcset with versionSrcSetArgs:\n%v" $dbg
+              (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
+                (dict "resource" (printf "%s [%s]" $versionSrcSetArgs.resource.Name
+                  $versionSrcSetArgs.resource.MediaType)))) }}
         {{ end }}
 
-        {{ with $variantSrcSets = partialCached "claris/_functions/resources/images/image-srcset"
-            (merge $variantSrcSetArgs (dict "Page" $page) ) $variantSrcSetArgs }}
-          {{ if and false $debug }}
-            {{ warnf "%s image-srcset with variantSrcSetArgs:\n%v\nreturned variantSrcSets:\n%v" $dbg
-                (jsonify (dict "indent" "  ") (merge $variantSrcSetArgs
-                  (dict "resource" (printf "%s [%s]" $variantSrcSetArgs.resource.Name
-                    $variantSrcSetArgs.resource.MediaType))))
-                (jsonify (dict "indent" "  ") $variantSrcSets) }}
+        {{ with partialCached "claris/_functions/resources/images/image-srcset"
+            (merge $versionSrcSetArgs (dict "Page" $page) ) $versionSrcSetArgs }}
+          {{ $variantSrcSets = merge $variantSrcSets . }}
+          {{ if $debug }}
+            {{ warnf "%s image-srcset with versionSrcSetArgs:\n%v\nreturned:\n%v" $dbg
+                (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
+                  (dict "resource" (printf "%s [%s]" $versionSrcSetArgs.resource.Name
+                    $versionSrcSetArgs.resource.MediaType))))
+                (jsonify (dict "indent" "  ") .) }}
           {{ end }}
         {{ else }}
-          {{ errorf "%s failed to get srcSet with variantSrcSetArgs:\n%v" $dbg
-              (jsonify (dict "indent" "  ") $variantSrcSetArgs) }}
+          {{ errorf "%s failed to get srcSet with versionSrcSetArgs:\n%v" $dbg
+              (jsonify (dict "indent" "  ") $versionSrcSetArgs) }}
         {{ end }}
 
       {{ else }}
 
-        {{ errorf "%s missing image resource=%#v.\n\nDid you pass the path to an image resource with the argument src=%v?\n\nParsed arguments for variant=%v:\n%v" $dbg
-            .resource .src $variantName (jsonify (dict "indent" "  ") $variantSrcSetArgs) }}
+        {{ errorf "%s missing image resource=%#v\nversionSrcSetArgs for variant=%v:\n%v" $dbg
+            $versionMeta.resource $variantName (jsonify (dict "indent" "  ") $versionSrcSetArgs) }}
 
       {{ end }}
     {{ end }}
