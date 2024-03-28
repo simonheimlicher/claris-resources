@@ -92,7 +92,7 @@
 
   {{ if and (reflect.IsMap $) $.Page }}
     {{ $page := .Page }}
-    {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+    {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 
     {{ $args := merge $ (dict "Page" nil) }}
 
@@ -148,6 +148,17 @@
       {{ end }}
     {{ end }}
 
+    <!-- Eliminate processed "resource" key -->
+    {{ if isset $ "resource" }}
+      {{ $augmentedArgsClean := dict }}
+      {{ range $k, $v := $augmentedArgs }}
+        {{ if not (in (slice "Page" "resource") $k) }}
+          {{ $augmentedArgsClean = merge $augmentedArgsClean (dict $k $v) }}
+        {{ end }}
+      {{ end }}
+      {{ $augmentedArgs = $augmentedArgsClean }}
+    {{ end }}
+
     {{ if $debug }}
       {{ warnf "%s Processing versions:\n%v\nfrom initial args:\n%v" $dbg
           (jsonify (dict "indent" "  ") $versions)
@@ -181,24 +192,10 @@
             "resource" $resource
           ) )
         ) }}
-        {{ $augmentedArgs = merge $ (dict
-          "version" $processedVersions
-        ) }}
-        <!-- Eliminate processed "resource" key -->
-        {{ if isset $ "resource" }}
-          {{ $augmentedArgsClean := dict }}
-          {{ range $k, $v := $augmentedArgs }}
-            {{ if not (in (slice "Page" "resource") $k) }}
-              {{ $augmentedArgsClean = merge $augmentedArgsClean (dict $k $v) }}
-            {{ end }}
-          {{ end }}
-          {{ $augmentedArgs = $augmentedArgsClean }}
-        {{ end }}
-
         {{ if $debug }}
-          {{ warnf "%s added resource=%v [%v] to augmentedArgs.version under id=%v:\n%v" $dbg
+          {{ warnf "%s added version meta with resource=%v [%v] to augmentedArgs.version under id=%v:\n%v" $dbg
               $resource $resource.MediaType $versionID
-              (jsonify (dict "indent" "  ") $augmentedArgs) }}
+              (jsonify (dict "indent" "  ") (merge $augmentedArgs (dict "Page" "omitted")) ) }}
         {{ end }}
         {{ $args = $augmentedArgs }}
       {{ else }}
@@ -207,6 +204,7 @@
       {{ end }}
     {{ end }}
 
+    {{ $augmentedArgs = merge $ (dict "version" $processedVersions) }}
     {{ with and $augmentedArgs.version.default.resource (merge $augmentedArgs (dict "Page" $page) ) }}
       {{ $parsedArgs = partial "claris/_functions/resources/images/parse-default-args" (dict "args" . "defaults" $defaults) }}
       {{ $parsedArgs = partial "claris/_functions/resources/images/parse-image-dimensions" $parsedArgs }}
@@ -218,9 +216,12 @@
       {{ end }}
 
       {{ $imgClass := default slice .imgclass }}
+      {{ if not (reflect.IsSlice $imgClass) }}
+        {{ $imgClass = slice $imgClass }}
+      {{ end }}
       {{ with .shape }}
         {{ with trim . " " | lower }}
-          {{ if in $shapeAttributes .}}
+          {{ if in $shapeAttributes . }}
             {{ $imgClass = append (printf "shape-%s" .) $imgClass }}
           {{ else }}
             {{ errorf "%s invalid value for .float=%v [type=%T]" $dbg . . }}
@@ -403,7 +404,7 @@
         {{ with and $.caption (ge (len $.caption) $minAltLength) }}
           {{ $imgAlt = . }}
         {{ else }}
-          {{ with or $.src $.resource }}
+          {{ with or $.version.default.resource }}
             {{ $imgAlt = path.BaseName . | humanize | replaceRE `(.*?) [0-9]+[xX][0-9]+(.*)` `$1$2` | strings.FirstUpper }}
             {{ if $debug }}
               {{ warnf "%s Generated 'alt' attribute imgAlt=%q from %v in parsedArgs:\n%v"
@@ -413,7 +414,7 @@
         {{ end }}
       {{ end }}
       {{ if or (not $imgAlt) (lt (len $imgAlt) $minAltLength) }}
-        {{ warnf "%s Failed to generate 'alt' attribute. None of alt|title|caption|resource found in parsedArgs:\n%v"
+        {{ warnf "%s Failed to generate 'alt' attribute. None of alt|title|caption|version.default.resource found in parsedArgs:\n%v"
             $dbg (jsonify (dict "indent" " ") (merge $parsedArgs (dict "Page" "omitted") ) ) }}
       {{ end }}
     {{ end }}

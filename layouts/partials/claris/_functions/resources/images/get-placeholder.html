@@ -1,0 +1,463 @@
+
+{{ $template := "claris/_functions/resources/images/image-srcset" }}
+{{ $imageFormatSrcsets := dict }}
+{{ $page := default page .Page }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $imageResourceArgs := merge . (dict "resourcetype" "image" "Debug" $debug) }}
+
+{{ $maxWidth := int (default 1.0e9 .maxwidth) }}
+{{ $maxHeight := int (default 1.0e9 .maxheight) }}
+{{ $referenceWidth := int (default 768 .referencewidth) }}
+
+{{ $formatSrcsets := slice }}
+
+{{ $targetQuality := default "default" .quality }}
+
+{{/* FIXME: We cannot use webp as intermediate format due to a bug in a library used by Hugo, which leads to
+ muted black and white levels when resizing WebP images
+ https://github.com/gohugoio/hugo/issues/8879#issue-966429273 */}}
+{{ $preferredFormat := "webp" }}
+{{ $defaultFormat := "original" }}
+{{ $intermediateFormat := default "tiff" }}
+{{ with $formatArg := .format }}
+  {{ if reflect.IsMap . }}
+    {{ range $k, $v := $formatArg }}
+      {{ if eq $k "default" }}
+        {{ $defaultFormat = $v }}
+        {{ if $debug }}
+          {{ warnf "%s override defaultFormat=%v based on .format=%v" $dbg
+              $defaultFormat $formatArg }}
+        {{ end }}
+      {{ else if eq $k "preferred" }}
+        {{ $preferredFormat = $v }}
+        {{ if $debug }}
+          {{ warnf "%s override preferredFormat=%v based on .format=%v" $dbg
+              $preferredFormat $formatArg }}
+        {{ end }}
+      {{ else if eq $k "intermediate" }}
+        {{ $intermediateFormat = $v }}
+        {{ if $debug }}
+          {{ warnf "%s override intermediateFormat=%v based on .format=%v" $dbg
+              $intermediateFormat $formatArg }}
+        {{ end }}
+      {{ else }}
+        {{ warnf "%s invalid key=%v with value=%v in .format=%v" $dbg
+            $k $v $formatArg }}
+      {{ end }}
+    {{ end }}
+  {{ else }}
+    {{ $defaultFormat = . }}
+    {{ if $debug }}
+      {{ warnf "%s override defaultFormat=%v based on .format=%v" $dbg
+          $defaultFormat . . }}
+    {{ end }}
+  {{ end }}
+{{ else }}
+  {{ if $debug }}
+    {{ warnf "%s using default format settings: defaultFormat=%v preferredFormat=%v intermediateFormat=%v" $dbg
+        $defaultFormat $preferredFormat $intermediateFormat}}
+  {{ end }}
+{{ end }}
+
+{{ $includeOriginalImage := default false .includeoriginal }}
+{{ $includePlaceholder := default false .includeplaceholder }}
+
+{{ $targetFormats := (slice $preferredFormat $defaultFormat) | uniq }}
+
+{{/* {{ $envProd := partialCached "claris/_functions/is-build-environment" "prod" "prod" hugo.Environment }} */}}
+
+{{/* FIXME: Apparently it is imperative to pass more than just $imageResourceArgs as cache buster.
+    Otherwise, subsequent invocations of this partial on the same page lead to the same resource
+    being re-used erroneously */}}
+{{ $img := partialCached "claris/_functions/resources/get-resource"
+  (merge $imageResourceArgs (dict "Page" $page) ) $imageResourceArgs $imageResourceArgs.resource $imageResourceArgs.src }}
+{{ if not $img }}
+  {{ errorf "%s Failed to get image resource based on argument .resource=%v [type=%T] .src=%v [type=%T]" $dbg
+      .resource .resource .src .src }}
+{{ end }}
+
+{{ $originalFormat := false }}
+{{ $intermediateFormatBaseImg := false }}
+{{ with $img }}
+  {{ $originalFormat = $img.MediaType.SubType }}
+  {{ if in $targetFormats "original" }}
+    {{ $targetFormats = complement (slice $originalFormat) $targetFormats }}
+  {{ else if in $targetFormats $originalFormat }}
+    {{ $targetFormatsWithOriginal := slice }}
+    {{ range $targetFormats }}
+      {{ if eq $originalFormat . }}
+        {{ $targetFormatsWithOriginal = append "original" $targetFormatsWithOriginal }}
+      {{ else }}
+        {{ $targetFormatsWithOriginal = append . $targetFormatsWithOriginal }}
+      {{ end }}
+    {{ end }}
+    {{ $targetFormats = $targetFormatsWithOriginal }}
+  {{ end }}
+
+  {{/* Crop the original image and use the result as the basis for all images of the srcset */}}
+  {{/* FIXME: There appears to be a bug in Hugo up to and including v. 0.122.0:
+       https://github.com/gohugoio/hugo/issues/11856#issuecomment-1877702199
+       This implies that we need to create a separate intermediate image for every target format */}}
+
+  {{ if $debug }}
+    {{ warnf "%s targetFormats=%v: processing original=%v to intermediate=%v" $dbg
+        $targetFormats $originalFormat $intermediateFormat }}
+  {{ end }}
+  {{ $intermediateFormatBaseImg = partial "claris/_functions/resources/images/process-image" (merge $imageResourceArgs  (dict
+      "resource" $img
+      "format" $intermediateFormat
+    )
+  ) }}
+{{ end }}
+
+{{ with $intermediateFormatBaseImg }}
+
+  {{ if $debug }}
+    {{ warnf "%s intermediateFormatBaseImg=%s[%dx%d]" $dbg .MediaType.SubType .Width .Height }}
+  {{ end }}
+
+  {{ $placeholderSvg := printf "<svg xmlns=%q viewBox=%q></svg>" "http://www.w3.org/2000/svg" (printf "0 0 %d %d" $intermediateFormatBaseImg.Width $intermediateFormatBaseImg.Height) | safeHTML }}
+  {{ $placeholderInlineImg := printf "data:image/svg+xml,%s" $placeholderSvg | replaceRE " " "%20" | replaceRE "<" "%3c" | replaceRE ">" "%3e" | replaceRE "\"" "'" | safeURL }}
+
+  {{ if $includePlaceholder }}
+    {{ $placeholderFormat := "webp" }}
+    {{ $placeholderSize := "32x" }}
+    {{ $placeholderQuality := 40 }}
+    {{ $placeholderBlurred := $intermediateFormatBaseImg | images.Filter (images.GaussianBlur 32) }}
+    {{ $placeholderBlurredResized := $placeholderBlurred.Resize (printf "%s %s" $placeholderSize $placeholderQuality) }}
+    {{ $placeholderBlurredResizedBlurred := $placeholderBlurredResized | images.Filter (images.GaussianBlur 2) }}
+    {{ $placeholder := $placeholderBlurredResizedBlurred.Resize (printf "%s %s %s" $placeholderSize $placeholderFormat $placeholderQuality) }}
+    {{ $placeholderInlineImg = printf "data:%s;base64,%s" $placeholder.MediaType ($placeholder.Content | base64Encode) | safeURL | safeHTMLAttr }}
+  {{ end }}
+
+  {{ $maxWidth = math.Min $maxWidth $intermediateFormatBaseImg.Width | cast.ToInt }}
+  {{ $roundBase := 2.0 }}
+  {{ $sizeRange := 4.0 }}
+  {{ $numWidths := int (add $sizeRange 1) }}
+  {{ if gt (div $maxWidth $sizeRange) $referenceWidth }}
+    {{ $sizeRange = int (math.Ceil (div $maxWidth $referenceWidth) ) }}
+    {{ $numWidths = int (add $sizeRange 1) }}
+      {{ if $debug }}
+        {{ warnf "%s [%dx%d] Increased sizeRange=%d numSizes=%d"
+          $dbg $maxWidth $intermediateFormatBaseImg.Height $sizeRange $numWidths }}
+      {{ end }}
+  {{ end }}
+  {{ $numWidths := int (add $sizeRange 1) }}
+
+  {{/* {{ if $envProd }}
+    {{ $numWidths = 7 }}
+  {{ end }} */}}
+
+  <!-- No changes below this line -->
+  {{ $powerBase := math.Pow $sizeRange (div 1.0 (sub $numWidths 1.0) ) }}
+  {{/* {{ $baseWidthCalculated := div $maxWidth $sizeRange }}
+  {{ $baseWidthCalculatedPrev := div $baseWidthCalculated $powerBase }}
+  {{ $roundToNearest := math.Pow $roundBase (math.Floor (div (math.Log (div (sub $baseWidthCalculated $baseWidthCalculatedPrev) 2) ) (math.Log $roundBase) ) ) }}
+  {{ $baseWidth := int (math.Round (mul (math.Round (div $baseWidthCalculated $roundToNearest) ) $roundToNearest) ) }} */}}
+
+  {{ $srcSetWidths := slice }}
+
+  {{/* {{ $widthCalculated := int (div $maxWidth $sizeRange) }} */}}
+  {{ $widthCalculated := $referenceWidth }}
+  {{ $widthCalculatedPrev := int (div $widthCalculated $powerBase) }}
+  {{ $baseWidth := 0 }}
+
+  {{ $qualityParams := (dict
+    "default" (dict
+      "default" (dict
+        "min" 40
+        "max" 80
+      )
+      "webp" (dict
+        "min" 1
+        "max" 90
+        "kbpermp" 48
+      )
+    )
+    "low" (dict
+      "default" (dict
+        "min" 20
+        "max" 40
+      )
+      "webp" (dict
+        "min" 1
+        "max" 90
+        "kbpermp" 16
+      )
+    )
+    "high" (dict
+      "default" (dict
+        "min" 60
+        "max" 80
+      )
+      "webp" (dict
+        "min" 10
+        "max" 100
+        "kbpermp" 64
+      )
+    )
+  ) }}
+
+  {{ range $i, $exp := (seq $numWidths) }}
+    {{ $width := 0 }}
+    {{ if lt $i (sub $numWidths 1) }}
+      {{ if gt $i 0 }}
+        {{ $widthCalculated = int (mul $baseWidth (math.Pow $powerBase $i)) }}
+      {{ end }}
+      <!-- roundToNearest = roundBase ^ floor( ln( (width_{n+1} - width_n) / 2)  / ln(roundBase) ) -->
+      {{ $roundToNearest := math.Pow $roundBase (math.Floor (div (math.Log (div (sub $widthCalculated $widthCalculatedPrev) 2) ) (math.Log $roundBase) ) ) }}
+
+      {{ if eq $i 0 }}
+        {{ $baseWidth = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
+        {{/* {{ warnf "%s\n    maxWidth=%d sizeRange=%d numSizes=%d [baseWidth=%d powerBase=%.2f roundToNearest=%.0f]"
+            $dbg $maxWidth $sizeRange $numWidths $baseWidth $powerBase $roundToNearest }} */}}
+      {{ end }}
+
+      {{ $width = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
+      {{ $widthCalculatedPrev = $width }}
+
+    {{ else }}
+      {{ $width = $maxWidth }}
+    {{ end }}
+
+    {{ $srcSetWidths = $srcSetWidths | append $width }}
+  {{ end }}
+
+  {{ range $targetFormat := $targetFormats }}
+
+    {{ $qualitySpec := default (index $qualityParams $targetQuality "default") (index $qualityParams $targetQuality $targetFormat) }}
+
+    {{ $formatSpec := cond (eq $targetFormat "original") $originalFormat $targetFormat }}
+    {{ if $debug }}
+      {{ warnf "%s FORMAT: %v=%v" $dbg $targetFormat $formatSpec }}
+    {{ end }}
+
+    {{ $formatBaseImg := $intermediateFormatBaseImg }}
+    {{ if eq $targetFormat "original" }}
+      {{ $formatBaseImg = partial "claris/_functions/resources/images/process-image" (merge $imageResourceArgs  (dict
+          "resource" $img
+          "format" $formatSpec
+        )
+      ) }}
+    {{ end }}
+
+    {{ $formatSrcSetArgs := dict "format" $formatSpec }}
+
+    {{ $qualityReferenceWidth := false }}
+    {{ with ($targetKBperMP := $qualitySpec.kbpermp) }}
+
+      {{ $maxIterations := 7 }}
+      {{ $maxDeviation := 0.05 }}
+      {{ $qualityFactorMin := 0.05 }}
+      {{ $qualityFactorMax := 20.0 }}
+
+      {{ $directionDivisorInitial := 2 }}
+      {{ $directionDivisorContinue := 4 }}
+      {{ $directionDivisorReverse := 4 }}
+
+      {{ range $widthIdx, $widthSpec := $srcSetWidths }}
+        {{ if not $qualityReferenceWidth }}
+          {{ if or (ge $widthSpec $referenceWidth) (eq $widthIdx (sub (len $srcSetWidths) 1) ) }}
+            {{ $nominalWidth := $widthSpec }}
+            {{ $candQuality := int (math.Round (add $qualitySpec.min (div (sub $qualitySpec.max $qualitySpec.min) 2) ) ) }}
+            {{ $candQualityMin := $qualitySpec.min }}
+            {{ $candQualityMax := $qualitySpec.max }}
+            {{ $lastQuality := $candQuality }}
+            {{ $lastKBperMP := 0.0 }}
+            {{ $lastRefRatio := 0.0 }}
+            {{ range $i, $e := seq $maxIterations }}
+              {{ if not $qualityReferenceWidth }}
+                {{ if or (gt $candQuality 100) (lt $candQuality 1) }}
+                  {{ errorf "%s invalid candQuality=%v" $dbg $candQuality }}
+                {{ end }}
+
+                {{ $resizedCandImg := partial "claris/_functions/resources/images/process-image" (merge $formatSrcSetArgs (dict
+                    "resource" $formatBaseImg
+                    "width" $nominalWidth
+                    "quality" $candQuality
+                  )
+                ) }}
+                {{ with $resizedCandImg }}
+                  {{ $sizeKB := div (len .Content) 1024.0 }}
+                  {{ $sizeMP := div (mul 1.0 .Width .Height) 1.0e6 }}
+                  {{ $targetSizeKB := mul $sizeMP $targetKBperMP  }}
+                  {{ $candKBPerMP := div $sizeKB $sizeMP }}
+                  {{ $candRefRatio := div $candKBPerMP $targetKBperMP }}
+                  {{ $deviation := sub 1.0 (math.Min (div $candKBPerMP $targetKBperMP) (div $targetKBperMP $candKBPerMP) ) }}
+                  {{ if or (eq $i (sub $maxIterations 1) ) (lt $deviation $maxDeviation) (eq $candQuality $qualitySpec.min) (eq $candQuality $qualitySpec.max) }}
+                    {{ $qualityReferenceWidth = int (math.Max $qualitySpec.min (math.Min $candQuality $qualitySpec.max) ) }}
+                    {{ if $debug }}
+                      {{ $terminationReason := printf "after %d iterations" $maxIterations }}
+                      {{ if not (eq $i (sub $maxIterations 1) ) }}
+                        {{ if lt $deviation $maxDeviation }}
+                          {{ $terminationReason = printf "deviation=%.2f < %.2f" $deviation $maxDeviation }}
+                        {{ else if (eq $candQuality $qualitySpec.min) }}
+                          {{ $terminationReason = printf "quality=qualitySpec.min=%2d" $qualitySpec.min }}
+                        {{ else if (eq $candQuality $qualitySpec.max) }}
+                          {{ $terminationReason = printf "quality=qualitySpec.max=%2d" $qualitySpec.max }}
+                        {{ else }}
+                          {{ errorf "%s BUG: unexpected termination reason" $dbg }}
+                        {{ end }}
+                      {{ end }}
+                      {{ warnf "%s %v[%dx%d] MP=%3.1f | size: final=%4.1fkB target=%4.1fkB | kB/MP: last=%#4.1f final=%#4.1f target=%v | ratio: last=%#4.3f final=%#4.3f | %s | quality: last=%2d final=%2d"
+                        $dbg $targetFormat .Width .Height $sizeMP $sizeKB $targetSizeKB
+                        $lastKBperMP $candKBPerMP (float $targetKBperMP)
+                        $lastRefRatio $candRefRatio $terminationReason
+                        $lastQuality $qualityReferenceWidth }}
+                    {{ end }}
+                  {{ else }}
+                    {{ $nextQuality := $candQuality }}
+                    {{ $verbString := "UNDEFINED" }}
+                    {{ $adaptLimitString := "UNDEFINED" }}
+                    {{ if eq $i 0 }}
+                      {{ if gt $candRefRatio 1.0 }}
+                        {{ $nextQuality = add $candQualityMin (div (sub $candQuality $candQualityMin) (float $directionDivisorInitial) ) }}
+                        {{ $candQualityMax = $candQuality }}
+                      {{ else }}
+                        {{ $nextQuality = sub $candQualityMax (div (sub $candQualityMax $candQuality) (float $directionDivisorInitial) ) }}
+                        {{ $candQualityMin = $candQuality }}
+                      {{ end }}
+                      {{ if $debug }}
+                        {{ $dir := "<" }}
+                        {{ $verb := "increas" }}
+                        {{ $adaptLimitString = printf "min=%2d->%2d" $qualitySpec.min $candQualityMin }}
+                        {{ if gt $candRefRatio 1.0 }}
+                          {{ $dir = ">" }}
+                          {{ $verb = "decreas" }}
+                          {{ $adaptLimitString = printf "max=%2d->%2d" $qualitySpec.max $candQualityMax }}
+                        {{ end }}
+                        {{ $verbString = printf "    start %sing" $verb }}
+                        {{/* warnf "%s size=%4.1fkB %s target=%4.1fkB: candQuality=%d %s: nextQuality=%2.0f %v"
+                            $dbg $sizeKB $dir $targetSizeKB $candQuality $verbString $nextQuality $adaptLimitString */}}
+                      {{ end }}
+                    {{ else }}
+                      {{ if $debug }}
+                        {{ $dir := "<" }}
+                        {{ $verb := "increas" }}
+                        {{ $adaptLimitString = printf "min=%2d->%2d" $candQualityMin $candQuality }}
+                        {{ if gt $candRefRatio 1.0 }}
+                          {{ $dir = ">" }}
+                          {{ $verb = "decreas" }}
+                          {{ $adaptLimitString = printf "max=%2d->%2d" $candQualityMax $candQuality }}
+                        {{ end }}
+                        {{ $verbString = printf "     keep %sing" $verb }}
+                        {{ if or (and (gt $candRefRatio 1.0) (lt $lastRefRatio 1.0)) (and (lt $candRefRatio 1.0) (gt $lastRefRatio 1.0)) }}
+                          {{ $verbString = printf "reverse and %se" $verb }}
+                        {{ end }}
+                        {{/* warnf "%s size=%4.1fkB %s target=%4.1fkB: candQuality=%d %s: nextQuality=%2.0f %v"
+                            $dbg $sizeKB $dir $targetSizeKB $candQuality $verbString $nextQuality $adaptLimitString */}}
+                      {{ end }}
+
+                      {{ if gt $candRefRatio 1.0 }}
+                        {{ $candQualityMax = $candQuality }}
+                        {{ if gt $lastRefRatio 1.0 }}
+                          {{ $nextQuality = math.Floor (add $candQualityMin (div (sub $candQuality $candQualityMin) (float $directionDivisorContinue) ) ) }}
+                        {{ else }}
+                          {{ $nextQuality = add $candQuality (div (sub $lastQuality $candQuality) (float $directionDivisorReverse) ) }}
+                        {{ end }}
+                      {{ else }}
+                        {{ $candQualityMin = $candQuality }}
+                        {{ if lt $lastRefRatio 1.0 }}
+                          {{ $nextQuality = math.Ceil (sub $candQualityMax (div (sub $candQualityMax $candQuality) (float $directionDivisorContinue) )) }}
+                        {{ else }}
+                          {{ $nextQuality = sub $candQuality (div (sub $candQuality $lastQuality) (float $directionDivisorReverse) ) }}
+                        {{ end }}
+                      {{ end }}
+                    {{ end }}
+                    {{ $nextQuality = int (math.Min $qualitySpec.max (math.Max $qualitySpec.min (math.Round $nextQuality) ) ) }}
+                    {{ if $debug }}
+                      {{ warnf "%s %v[%dx%d] MP=%3.1f | size:  cand=%4.1fkB target=%4.1fkB | kB/MP: last=%#4.1f  cand=%#4.1f target=%v | ratio: last=%#4.3f  cand=%#4.3f | %s  | quality: last=%2d  cand=%2d next=%2d %s: [%2d,%d]"
+                        $dbg $targetFormat .Width .Height $sizeMP $sizeKB $targetSizeKB
+                        $lastKBperMP $candKBPerMP (float $targetKBperMP)
+                        $lastRefRatio $candRefRatio
+                        $verbString
+                        $lastQuality $candQuality $nextQuality $adaptLimitString $candQualityMin $candQualityMax }}
+                    {{ end }}
+                    {{ $lastQuality = $candQuality }}
+                    {{ $candQuality = $nextQuality }}
+                    {{ $lastKBperMP = $candKBPerMP }}
+                    {{ $lastRefRatio = $candRefRatio }}
+                  {{ end }}
+                {{ end }}
+              {{ end }}
+            {{ end }}
+          {{ end }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+
+    {{ $qualityRange := false }}
+    {{ with $qualityReferenceWidth }}
+      {{/* {{ $qualityRange = 0 }} */}}
+      {{ $qualityRange = int (math.Min (sub $qualitySpec.max $qualityReferenceWidth) (math.Max $numWidths (sub $qualityReferenceWidth $qualitySpec.min) ) ) }}
+    {{ else }}
+      {{ $qualityReferenceWidth = $qualitySpec.min }}
+      {{ $qualityRange = int (sub $qualitySpec.max $qualitySpec.min) }}
+    {{ end }}
+    {{ $qualityStep := div (float $qualityRange) (sub $numWidths 1) }}
+
+    {{ $resizedImg := false }}
+    {{ $srcSetList := slice }}
+
+    {{ range $widthIdx, $nominalWidth := $srcSetWidths }}
+      {{ $quality := int (math.Round (add $qualityReferenceWidth (mul $widthIdx $qualityStep) ) ) }}
+      {{ if or (gt $quality 100) (lt $quality 1) }}
+        {{ warnf "%s invalid quality=%v" $dbg $quality }}
+      {{ end }}
+
+      {{ $resizeArgs := merge $formatSrcSetArgs (dict
+          "resource" $formatBaseImg
+          "width" $nominalWidth
+          "quality" $quality
+      ) }}
+      {{ $resizedImg = partial "claris/_functions/resources/images/process-image" $resizeArgs }}
+
+      {{ with $resizedImg }}
+        {{ $srcSetList = append (printf "%s %dw" .RelPermalink $nominalWidth) $srcSetList }}
+        {{ $sizeKB := div (len .Content) 1024.0 }}
+        {{ $sizeMP := div (mul 1.0 .Width .Height) 1000000 }}
+        {{ $scaledKBPerMP := div $sizeKB $sizeMP }}
+        {{ if $debug }}
+          {{ warnf "%s %s[%dx%d]->%v=%v[%4dx%4d] size=%#5.1fkB %4.1fMP kB/MP=%4.1f qualitySpec=[%2d,%2d] quality=%2d | range=%2d step=%2.2f\nurl: %q\n%v"
+            $dbg
+            $formatBaseImg.MediaType.SubType $formatBaseImg.Width $formatBaseImg.Height $targetFormat $resizedImg.MediaType.SubType $resizedImg.Width $resizedImg.Height
+            $sizeKB $sizeMP $scaledKBPerMP $qualitySpec.min $qualitySpec.max $quality $qualityRange $qualityStep $resizedImg.RelPermalink (jsonify (dict "indent" "  ") $resizeArgs) }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+
+    {{ with $resizedImg }}
+      {{ if eq .MediaType.SubType $formatSpec }}
+        {{ $formatParams := (dict
+          "resource" $resizedImg
+          "format" $targetFormat
+          "srcset" (delimit $srcSetList `, `)
+          ) }}
+        {{ if or false $debug }}
+          {{ warnf "%s appending formatParams:\n%v"
+              $dbg (jsonify (dict "indent" "  ") $formatParams) }}
+        {{ end }}
+        {{ $formatSrcsets = append (slice $formatParams) $formatSrcsets }}
+      {{ else }}
+        {{ errorf "%s BUG: failed to produce image with format=%v: .MediaType.SubType=%v"
+            $dbg $formatSpec $resizedImg.MediaType.SubType }}
+      {{ end }}
+    {{ else }}
+      {{ errorf "%s failed to produce image with format=%v"
+          $dbg $formatSpec }}
+    {{ end }}
+  {{ end }}
+
+  {{ $imageFormatSrcsets = (dict
+    "placeholder" $placeholderInlineImg
+    "formats" $formatSrcsets
+  ) }}
+  {{ if and false $debug }}
+    {{ warnf "%s returning imageFormatSrcsets:\n%v"
+        $dbg (jsonify (dict "indent" "  ") $imageFormatSrcsets) }}
+  {{ end }}
+{{/*  else }}
+  {{ errorf %sNo image matching parameter .resource='%s'" $dbg .resource */}}
+{{ end }}
+{{ return $imageFormatSrcsets }}

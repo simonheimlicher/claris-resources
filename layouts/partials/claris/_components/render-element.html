@@ -27,7 +27,7 @@
   {{- end }}
 {{- end -}}
   >
-{{- if or .children .content }}
+{{- if or .children .content .empty }}
   {{- with .children }}
     {{- if $debug }}
       {{- warnf "%s rendering %d children:\n%v" $dbg (len . ) (jsonify (dict "indent" "  ") . ) }}

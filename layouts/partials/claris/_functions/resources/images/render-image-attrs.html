@@ -12,8 +12,9 @@
 {{ $imageElement := dict }}
 
 {{ $defaultVariantName := "default" }}
-{{ $sourceAttributeNames := slice "sizes" "media" "style" }}
+{{ $sourceAttributeNames := slice "sizes" "style" }}
 {{ $sourceAttributeNamesImg := slice "alt" "title" "class" "data-zoomable" }}
+{{ $sourceAttributeNamesSource := slice "media" }}
 
 {{ $parsedArgs := partialCached "claris/_functions/resources/images/parse-args"
      (merge $ (dict "Page" $page) ) (merge $ (dict "Page" nil) ) }}
@@ -35,7 +36,9 @@
   {{ with .processing }}
     {{ $variantSrcSetArgs = merge $variantSrcSetArgs . }}
   {{ end }}
+
   {{ $variants := dict $defaultVariantName . }}
+  {{ $backgroundElements := slice }}
 
   {{ if and true $debug }}
     {{ warnf "%s gathering source child elements for variants:\n%v"
@@ -43,27 +46,31 @@
   {{ end }}
 
   {{ range $variantName, $variantMeta := $variants }}
-    {{ $variantSrcSets := dict }}
+    {{ $versionsWithFormats := slice }}
     {{ range $versionID, $versionMeta := $variantMeta.image.version }}
 
-      {{ $versionSrcSetArgs := merge $variantSrcSetArgs $versionMeta }}
+      {{ $versionSrcSetArgs := merge $variantSrcSetArgs (dict "version" nil) $versionMeta }}
       {{ if $versionMeta.resource }}
         {{ if $debug }}
-          {{ warnf "%s calling image-srcset with versionSrcSetArgs:\n%v" $dbg
+          {{ warnf "%s calling get-srcset with versionSrcSetArgs:\n%v" $dbg
               (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
                 (dict "resource" (printf "%s [%s]" $versionSrcSetArgs.resource.Name
                   $versionSrcSetArgs.resource.MediaType)))) }}
         {{ end }}
 
-        {{ with partialCached "claris/_functions/resources/images/image-srcset"
+        {{ with partialCached "claris/_functions/resources/images/get-srcset"
             (merge $versionSrcSetArgs (dict "Page" $page) ) $versionSrcSetArgs }}
-          {{ $variantSrcSets = merge $variantSrcSets . }}
+          {{ $versioWithFormats := merge $versionMeta (dict "formats" . ) }}
+          {{/* The default version is the first item and we need to render it
+          as an <img> element as the last element of <picture>. For this reason,
+          we reverse the order of the versions here */}}
+          {{ $versionsWithFormats = append $versionsWithFormats (slice $versioWithFormats) }}
           {{ if $debug }}
-            {{ warnf "%s image-srcset with versionSrcSetArgs:\n%v\nreturned:\n%v" $dbg
+            {{ warnf "%s get-srcset with versionSrcSetArgs:\n%v\nreturned:\n%v" $dbg
                 (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
                   (dict "resource" (printf "%s [%s]" $versionSrcSetArgs.resource.Name
                     $versionSrcSetArgs.resource.MediaType))))
-                (jsonify (dict "indent" "  ") .) }}
+                (jsonify (dict "indent" "  ") . ) }}
           {{ end }}
         {{ else }}
           {{ errorf "%s failed to get srcSet with versionSrcSetArgs:\n%v" $dbg
@@ -78,10 +85,10 @@
       {{ end }}
     {{ end }}
 
-    {{ with $variantSrcSets }}
+    {{ with $versionsWithFormats }}
 
       {{ if $debug }}
-        {{ warnf "%s generated variantSrcSets:\n%v" $dbg (jsonify (dict "indent" "  ") $variantSrcSets) }}
+        {{ warnf "%s generated versionsWithFormats:\n%v" $dbg (jsonify (dict "indent" "  ") $versionsWithFormats) }}
       {{ end }}
 
       {{ $styleAttr := false }}
@@ -89,71 +96,104 @@
         {{ $styleAttr = printf "object-fit: cover; object-position: %s" . }}
       {{ end }}
 
-      {{ $lastSourceIdx := sub (len .formats) 1 }}
       {{/* If there are multiple sources, all up to the last one are rendered as `source` elements */}}
       {{ $elementName := "source" }}
+      {{ $lastVersionIdx := sub (len $versionsWithFormats) 1 }}
       {{ if $debug }}
-        {{ warnf "%s adding attributes for variant=%v:\n%v" $dbg $variantName (jsonify (dict "indent" "  ") . ) }}
+        {{ warnf "%s adding attributes for variant=%v and versionsWithFormats:\n%v" $dbg $variantName
+            (jsonify (dict "indent" "  ") $versionsWithFormats) }}
       {{ end }}
 
       {{ $variantChildren := slice }}
-      {{ range $formatIdx, $formatSrcSet := .formats }}
-        {{ if $debug }}
-          {{ warnf "%s adding attributes for rendering to formatSrcSet:\n%v" $dbg
-            (jsonify (dict "indent" "  ") (merge .
-              (dict "resource" (printf "%s [%s]" .resource.Name .resource.MediaType) ) ) ) }}
-        {{ end }}
+      {{ range $versionIdx, $versionFormatSrcSets := $versionsWithFormats }}
+        {{ range $formatIdx, $formatSrcSet := $versionFormatSrcSets.formats }}
+          {{ if $debug }}
+            {{ warnf "%s adding attributes for rendering to formatSrcSet:\n%v" $dbg
+              (jsonify (dict "indent" "  ") (merge .
+                (dict "resource" (printf "%s [%s]" .resource.Name .resource.MediaType) ) ) ) }}
+          {{ end }}
 
-        {{/* The `img` element must always be the last element within `picture` */}}
-        {{ if eq $formatIdx $lastSourceIdx }}
-          {{ $elementName = "img" }}
-        {{ end }}
+          {{/* The `img` element must always be the last element within `picture`
+            We render the last format of the first version as img */}}
+          {{ $lastFormatIdx := sub (len $versionFormatSrcSets.formats) 1 }}
+          {{ if and (eq $versionIdx $lastVersionIdx) (eq $formatIdx $lastFormatIdx) }}
+            {{ $elementName = "img" }}
+          {{ end }}
 
-        {{ $sourceAttr := slice }}
-        {{/* The partial "claris/_functions/resources/images/image-srcset"
-            stores a reference to the last image resource in `.resource`.
-            Hence this is the last image of the srcset and its
-            `.RelPermalink` attribute can be used as the `src` attribute
-            of the `img` element */}}
-        {{ with .resource }}
-          {{ with and (eq $elementName "img") .RelPermalink }}
-            {{ $sourceAttr = merge $sourceAttr (dict "src" . ) }}
-          {{ end }}
-          {{ with and (eq $elementName "source") .MediaType }}
-            {{ $sourceAttr = merge $sourceAttr (dict "type" . ) }}
-          {{ end }}
-          {{ with .Width }}
-            {{ $sourceAttr = merge $sourceAttr (dict "width" . ) }}
-          {{ end }}
-          {{ with .Height }}
-            {{ $sourceAttr = merge $sourceAttr (dict "height" . ) }}
-          {{ end }}
-        {{ end }}
+          {{ with and (eq $variantName $defaultVariantName) (eq $formatIdx 0) .resource }}
+            {{ $dominantColorsHEX := .Colors }}
+            {{ $dominantColorHEX := index $dominantColorsHEX 0 }}
 
-        {{ range $k := slice "src" "srcset" }}
-          {{ with $v := index $formatSrcSet $k }}
-            {{ $sourceAttr = merge $sourceAttr (dict $k $v) }}
+            {{ if $debug }}
+              {{ warnf "%s adding background elements with dominantColorHEX: %v" $dbg $dominantColorHEX }}
+            {{ end }}
+            {{ range $side := slice "left" "right" }}
+              {{ $backgroundElements = append (dict
+                "name" "div"
+                "attr" (dict
+                  "class" (slice "background" $side)
+                  "style" (printf "--background_dominant-color: %s;" $dominantColorHEX  | safeHTMLAttr)
+                )
+                "empty" true
+              ) $backgroundElements }}
+            {{ end }}
           {{ end }}
-        {{ end }}
-        {{ $attributeNames := $sourceAttributeNames }}
-        {{ if eq $elementName "img" }}
-          {{ $attributeNames = append $sourceAttributeNamesImg $attributeNames }}
-        {{ end }}
-        {{ range $k, $v := $variantMeta.image }}
-          {{ if in $attributeNames $k }}
-            {{ $sourceAttr = merge $sourceAttr (dict $k $v) }}
+
+
+          {{ $formatSourceAttr := dict }}
+          {{/* The partial "claris/_functions/resources/images/get-srcset"
+              stores a reference to the last image resource in `.resource`.
+              Hence this is the last image of the srcset and its
+              `.RelPermalink` attribute can be used as the `src` attribute
+              of the `img` element */}}
+          {{ with .resource }}
+            {{ with and (eq $elementName "img") .RelPermalink }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict "src" . ) }}
+            {{ end }}
+            {{ with and (eq $elementName "source") .MediaType }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict "type" . ) }}
+            {{ end }}
+            {{ with .Width }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict "width" . ) }}
+            {{ end }}
+            {{ with .Height }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict "height" . ) }}
+            {{ end }}
           {{ end }}
+
+          {{ with .srcset }}
+            {{ $formatSourceAttr = merge $formatSourceAttr (dict "srcset" . ) }}
+          {{ end }}
+
+          {{ $attributeNames := $sourceAttributeNames }}
+          {{ if eq $elementName "img" }}
+            {{ $attributeNames = append $sourceAttributeNamesImg $attributeNames }}
+          {{ else }}
+            {{ $attributeNames = append $sourceAttributeNamesSource $attributeNames }}
+          {{ end }}
+          {{ range $k, $v := $variantMeta.image }}
+            {{ if in $attributeNames $k }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict $k $v) }}
+            {{ end }}
+          {{ end }}
+          {{ range $k, $v := $versionFormatSrcSets }}
+            {{ if in $attributeNames $k }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict $k $v) }}
+            {{ end }}
+          {{ end }}
+
+
+          {{ $sourceElement := (dict
+            "name" $elementName
+            "attr" $formatSourceAttr
+          ) }}
+          {{ if $debug }}
+            {{ warnf "%s adding HTML %q element as source %d of %d:\n%v" $dbg
+                $elementName (add $formatIdx 1) (len $formatSrcSet)
+                (jsonify (dict "indent" "  ") . ) }}
+          {{ end }}
+          {{ $variantChildren = append $sourceElement $variantChildren }}
         {{ end }}
-        {{ $sourceElement := (dict
-          "name" $elementName
-          "attr" $sourceAttr
-        ) }}
-        {{ if $debug }}
-          {{ warnf "%s adding HTML %q element as source %d of %d:\n%v" $dbg
-              $elementName (add $formatIdx 1) (len $variantSrcSets.formats)
-              (jsonify (dict "indent" "  ") . ) }}
-        {{ end }}
-        {{ $variantChildren = append $sourceElement $variantChildren }}
       {{ end }}
 
       {{ if $debug }}
@@ -171,13 +211,20 @@
   {{ else }}
     {{ $imageElement = index $sourceChildren 0 }}
   {{ end }}
-  {{ $containerChildren = append $imageElement $containerChildren }}
+
+  {{ with $backgroundElements }}
+    {{ $containerChildren = append (index $backgroundElements 0) $containerChildren }}
+    {{ $containerChildren = append $imageElement $containerChildren }}
+    {{ $containerChildren = append (index $backgroundElements 1) $containerChildren }}
+  {{ else }}
+    {{ $containerChildren = append $imageElement $containerChildren }}
+  {{ end }}
 {{ end }}
 
 {{ with $containerArgs := $parsedArgs.container }}
   {{/* Determine the HTML element to use as `containerElement` and `imageElement`:
     - containerElement: the outermost element to render the image
-      with all its variants and versions. Could be `figure`, `picture` or `img`
+      with all its variants and formatSrcSet. Could be `figure`, `picture` or `img`
     - imageElement: the element that contains the sourceElements.
       Either `picture` or `img` */}}
   {{ with $containerArgs.containerclass }}
