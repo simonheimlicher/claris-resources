@@ -122,7 +122,7 @@
       "lightbox" nil
 
       "fetchpriority" nil
-      "lazy" true
+      "loading" nil
 
       "imgclass" (slice "responsive")
     ) }}
@@ -159,7 +159,7 @@
       {{ $augmentedArgs = $augmentedArgsClean }}
     {{ end }}
 
-    {{ if $debug }}
+    {{ if and false $debug }}
       {{ warnf "%s Processing versions:\n%v\nfrom initial args:\n%v" $dbg
           (jsonify (dict "indent" "  ") $versions)
           (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) ) }}
@@ -167,7 +167,7 @@
 
     {{ $processedVersions := dict }}
     {{ range $versionID, $versionMeta := $versions }}
-      {{ if $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s Processing versionID=%v:\n%v" $dbg
             $versionID (jsonify (dict "indent" "  ") $versionMeta) }}
       {{ end }}
@@ -192,7 +192,7 @@
             "resource" $resource
           ) )
         ) }}
-        {{ if $debug }}
+        {{ if and false $debug }}
           {{ warnf "%s added version meta with resource=%v [%v] to augmentedArgs.version under id=%v:\n%v" $dbg
               $resource $resource.MediaType $versionID
               (jsonify (dict "indent" "  ") (merge $augmentedArgs (dict "Page" "omitted")) ) }}
@@ -227,6 +227,38 @@
             {{ errorf "%s invalid value for .float=%v [type=%T]" $dbg . . }}
           {{ end }}
         {{ end }}
+      {{ end }}
+
+      {{/* To achieve a '100' score on Lighthouse, it's key to determine
+        which images to prioritize and to let all others be loaded lazily
+        with `fetchpriority="low"` */}}
+      {{ $fetchPriority := "low" }}
+      {{ with or .fetchpriority $fetchPriority }}
+        {{ if (in (slice "auto" "low" "high") . ) }}
+          {{ $fetchPriority = . }}
+          {{ $parsedArgs = merge $parsedArgs (dict "fetchpriority" $fetchPriority ) }}
+        {{ else }}
+            {{ errorf "%s Invalid value for fetchpriority: .fetchpriority=%v [type %T]"
+                $dbg $fetchPriority $fetchPriority -}}
+        {{ end }}
+      {{ end }}
+
+      {{/* Default the `loading` attribute to `lazy` */}}
+      {{ $loading := "lazy" }}
+      {{ with $parsedArgs.fetchpriority }}
+        {{ if eq . "auto" }}
+          {{ $loading = false }}
+        {{ else if eq . "high" }}
+          {{ $loading = "eager" }}
+        {{ end }}
+      {{ end }}
+      {{ with or .loading $loading }}
+        {{ $parsedArgs = merge $parsedArgs (dict "loading" . ) }}
+      {{ end }}
+
+      {{ if $debug }}
+        {{ warnf "%s .fetchpriority=%v -> $parsedArgs.fetchpriority=%v .loading=%v -> $parsedArgs.loading=%v" $dbg
+            .fetchpriority $parsedArgs.fetchpriority .loading $parsedArgs.loading }}
       {{ end }}
 
       {{ with .lightbox }}
