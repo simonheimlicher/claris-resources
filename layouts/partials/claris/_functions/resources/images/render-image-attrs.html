@@ -4,12 +4,14 @@
 {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $containerElement := dict }}
-{{ $containerElementName := "img" }}
+{{ $containerElementName := false }}
 {{ $containerAttr := dict }}
 {{ $containerClass := slice }}
 {{ $containerChildren := slice }}
 
 {{ $imageElement := dict }}
+{{ $backgroundElements := slice }}
+{{ $captionElement := dict }}
 
 {{ $defaultVariantName := "default" }}
 {{ $sourceAttributeNames := slice "sizes" "style" }}
@@ -19,7 +21,7 @@
 {{ $parsedArgs := partialCached "claris/_functions/resources/images/parse-args"
      (merge $ (dict "Page" $page) ) (merge $ (dict "Page" nil) ) }}
 
-{{ if $debug }}
+{{ if and false $debug }}
   {{ warnf "%s called parse-args with:\n%v\nNow generating attributes for render-image with parsedArgs:\n%v" $dbg
       (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
         "resource" (cond (not .resource) .resource (printf "%v [%v]" .resource .resource.MediaType) )) ) )
@@ -38,7 +40,6 @@
   {{ end }}
 
   {{ $variants := dict $defaultVariantName . }}
-  {{ $backgroundElements := slice }}
 
   {{ if and true $debug }}
     {{ warnf "%s gathering source child elements for variants:\n%v"
@@ -51,7 +52,7 @@
 
       {{ $versionSrcSetArgs := merge $variantSrcSetArgs (dict "version" nil) $versionMeta }}
       {{ if $versionMeta.resource }}
-        {{ if $debug }}
+        {{ if and false $debug }}
           {{ warnf "%s calling get-srcset with versionSrcSetArgs:\n%v" $dbg
               (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
                 (dict "resource" (printf "%s [%s]" $versionSrcSetArgs.resource.Name
@@ -62,10 +63,10 @@
             (merge $versionSrcSetArgs (dict "Page" $page) ) $versionSrcSetArgs }}
           {{ $versioWithFormats := merge $versionMeta (dict "formats" . ) }}
           {{/* The default version is the first item and we need to render it
-          as an <img> element as the last element of <picture>. For this reason,
+          as an `img` element as the last element of <picture>. For this reason,
           we reverse the order of the versions here */}}
           {{ $versionsWithFormats = append $versionsWithFormats (slice $versioWithFormats) }}
-          {{ if $debug }}
+          {{ if and false $debug }}
             {{ warnf "%s get-srcset with versionSrcSetArgs:\n%v\nreturned:\n%v" $dbg
                 (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
                   (dict "resource" (printf "%s [%s]" $versionSrcSetArgs.resource.Name
@@ -87,7 +88,7 @@
 
     {{ with $versionsWithFormats }}
 
-      {{ if $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s generated versionsWithFormats:\n%v" $dbg (jsonify (dict "indent" "  ") $versionsWithFormats) }}
       {{ end }}
 
@@ -99,7 +100,7 @@
       {{/* If there are multiple sources, all up to the last one are rendered as `source` elements */}}
       {{ $elementName := "source" }}
       {{ $lastVersionIdx := sub (len $versionsWithFormats) 1 }}
-      {{ if $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s adding attributes for variant=%v and versionsWithFormats:\n%v" $dbg $variantName
             (jsonify (dict "indent" "  ") $versionsWithFormats) }}
       {{ end }}
@@ -107,7 +108,7 @@
       {{ $variantChildren := slice }}
       {{ range $versionIdx, $versionFormatSrcSets := $versionsWithFormats }}
         {{ range $formatIdx, $formatSrcSet := $versionFormatSrcSets.formats }}
-          {{ if $debug }}
+          {{ if and false $debug }}
             {{ warnf "%s adding attributes for rendering to formatSrcSet:\n%v" $dbg
               (jsonify (dict "indent" "  ") (merge .
                 (dict "resource" (printf "%s [%s]" .resource.Name .resource.MediaType) ) ) ) }}
@@ -124,7 +125,7 @@
             {{ $dominantColorsHEX := .Colors }}
             {{ $dominantColorHEX := index $dominantColorsHEX 0 }}
 
-            {{ if $debug }}
+            {{ if and false $debug }}
               {{ warnf "%s adding background elements with dominantColorHEX: %v" $dbg $dominantColorHEX }}
             {{ end }}
             {{ range $side := slice "left" "right" }}
@@ -187,8 +188,8 @@
             "name" $elementName
             "attr" $formatSourceAttr
           ) }}
-          {{ if $debug }}
-            {{ warnf "%s adding HTML %q element as source %d of %d:\n%v" $dbg
+          {{ if and false $debug }}
+            {{ warnf "%s adding %q element as source %d of %d:\n%v" $dbg
                 $elementName (add $formatIdx 1) (len $formatSrcSet)
                 (jsonify (dict "indent" "  ") . ) }}
           {{ end }}
@@ -196,7 +197,7 @@
         {{ end }}
       {{ end }}
 
-      {{ if $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s adding sources for variant=%v:\n%v" $dbg
             $variantName (jsonify (dict "indent" "  ") $variantChildren) }}
       {{ end }}
@@ -212,13 +213,6 @@
     {{ $imageElement = index $sourceChildren 0 }}
   {{ end }}
 
-  {{ with $backgroundElements }}
-    {{ $containerChildren = append (index $backgroundElements 0) $containerChildren }}
-    {{ $containerChildren = append $imageElement $containerChildren }}
-    {{ $containerChildren = append (index $backgroundElements 1) $containerChildren }}
-  {{ else }}
-    {{ $containerChildren = append $imageElement $containerChildren }}
-  {{ end }}
 {{ end }}
 
 {{ with $containerArgs := $parsedArgs.container }}
@@ -238,30 +232,45 @@
   {{ with $containerArgs.caption }}
     {{/* As there is a `caption` attribute, we use a `figure` element as the container */}}
     {{ $containerElementName = "figure" }}
-    {{ $captionElement := (dict
+    {{ $captionElement = (dict
       "name" "figcaption"
       "content" ($page.RenderString . )
       "attr" (dict "class" (slice "caption font-meta"))
     ) }}
-    {{ $containerChildren = append $captionElement $containerChildren }}
   {{ end }}
 {{ end }}
 
 {{ with $containerClass }}
   {{ $containerAttr = (merge $containerAttr (dict "class" . ) ) }}
 {{ end }}
-{{ if $debug }}
-  {{ warnf "%s containerElement=%v: attr:\n%v\nchildren:\n%v" $dbg
-      $containerElementName
-      (jsonify (dict "indent" "  ") $containerAttr)
-      (jsonify (dict "indent" "  ") $containerChildren) }}
-{{ end }}
 
-{{ $containerElement = (dict
-  "name" $containerElementName
-  "attr" $containerAttr
-  "children" $containerChildren
-) }}
+{{ if $containerElementName }}
+  {{ with $backgroundElements }}
+    {{ $containerChildren = append (index $backgroundElements 0) $containerChildren }}
+    {{ $containerChildren = append $imageElement $containerChildren }}
+    {{ $containerChildren = append (index $backgroundElements 1) $containerChildren }}
+  {{ else }}
+    {{ $containerChildren = append $imageElement $containerChildren }}
+  {{ end }}
+  {{ with $captionElement }}
+    {{ $containerChildren = append $captionElement $containerChildren }}
+  {{ end }}
+  {{ $containerElement = (dict
+    "name" $containerElementName
+    "attr" $containerAttr
+    "children" $containerChildren
+  ) }}
+  {{ if $debug }}
+    {{ warnf "%s containerElement=%v: attr:\n%v\nchildren:\n%v" $dbg
+        $containerElementName
+        (jsonify (dict "indent" "  ") $containerAttr)
+        (jsonify (dict "indent" "  ") $containerChildren) }}
+  {{ end }}
+{{ else }}
+  {{ $containerElement = merge $imageElement (dict
+    "attr" (merge $imageElement.attr $containerAttr)
+  ) }}
+{{ end }}
 
 {{ if $debug }}
   {{ warnf "%s returning containerElement:\n%v" $dbg (jsonify (dict "indent" "  ") $containerElement ) }}
