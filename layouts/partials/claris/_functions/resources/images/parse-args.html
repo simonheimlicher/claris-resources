@@ -271,8 +271,7 @@
       {{ end }}
 
       {{ $imgClass := default slice .imgclass }}
-      {{ warnf "%s imgClass=%v" $dbg $imgClass }}
-      {{ if not (reflect.IsSlice $imgClass) }}
+      {{ if not (reflect.IsSlice $imgClass ) }}
         {{ $imgClass = slice $imgClass }}
       {{ end }}
       {{ with .shape }}
