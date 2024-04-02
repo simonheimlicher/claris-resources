@@ -30,7 +30,7 @@
 
 {{ $sourceChildren := slice }}
 {{ with $parsedArgs }}
-  {{/* FIXME: Here we need to add additional logic to deal with multiple variants */}}
+  {{/* NOTE: Here we need to add additional logic to deal with multiple variants */}}
   {{ $variantSrcSetArgs := dict }}
   {{ with .image }}
     {{ $variantSrcSetArgs = merge $variantSrcSetArgs . }}

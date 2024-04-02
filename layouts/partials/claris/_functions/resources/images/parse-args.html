@@ -216,7 +216,7 @@
       {{ end }}
 
       {{ $imgClass := default slice .imgclass }}
-      {{ if not (reflect.IsSlice $imgClass) }}
+      {{ if not (reflect.IsSlice $imgClass ) }}
         {{ $imgClass = slice $imgClass }}
       {{ end }}
       {{ with .shape }}

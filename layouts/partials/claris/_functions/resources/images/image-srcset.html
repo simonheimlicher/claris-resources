@@ -13,7 +13,7 @@
 
 {{ $targetQuality := default "default" .quality }}
 
-{{/* FIXME: We cannot use webp as intermediate format due to a bug in a library used by Hugo, which leads to
+{{/* NOTE: We cannot use webp as intermediate format due to a bug in a library used by Hugo, which leads to
  muted black and white levels when resizing WebP images
  https://github.com/gohugoio/hugo/issues/8879#issue-966429273 */}}
 {{ $preferredFormat := "webp" }}
@@ -54,7 +54,7 @@
   {{ end }}
 {{ else }}
   {{ if $debug }}
-    {{ warnf "%s using default format settings: defaultFormat=%v preferredFormat=%v intermediateFormat=%v" $dbg 
+    {{ warnf "%s using default format settings: defaultFormat=%v preferredFormat=%v intermediateFormat=%v" $dbg
         $defaultFormat $preferredFormat $intermediateFormat}}
   {{ end }}
 {{ end }}
@@ -66,7 +66,7 @@
 
 {{/* {{ $envProd := partialCached "claris/_functions/is-build-environment" "prod" "prod" hugo.Environment }} */}}
 
-{{/* FIXME: Apparently it is imperative to pass more than just $imageResourceArgs as cache buster.
+{{/* NOTE: Apparently it is imperative to pass more than just $imageResourceArgs as cache buster.
     Otherwise, subsequent invocations of this partial on the same page lead to the same resource
     being re-used erroneously */}}
 {{ $img := partialCached "claris/_functions/resources/get-resource"
@@ -93,9 +93,9 @@
     {{ end }}
     {{ $targetFormats = $targetFormatsWithOriginal }}
   {{ end }}
-  
+
   {{/* Crop the original image and use the result as the basis for all images of the srcset */}}
-  {{/* FIXME: There appears to be a bug in Hugo up to and including v. 0.122.0:
+  {{/* NOTE: There appears to be a bug in Hugo up to and including v. 0.122.0:
        https://github.com/gohugoio/hugo/issues/11856#issuecomment-1877702199
        This implies that we need to create a separate intermediate image for every target format */}}
 
@@ -369,7 +369,7 @@
                       {{ warnf "%s %v[%dx%d] MP=%3.1f | size:  cand=%4.1fkB target=%4.1fkB | kB/MP: last=%#4.1f  cand=%#4.1f target=%v | ratio: last=%#4.3f  cand=%#4.3f | %s  | quality: last=%2d  cand=%2d next=%2d %s: [%2d,%d]"
                         $dbg $targetFormat .Width .Height $sizeMP $sizeKB $targetSizeKB
                         $lastKBperMP $candKBPerMP (float $targetKBperMP)
-                        $lastRefRatio $candRefRatio 
+                        $lastRefRatio $candRefRatio
                         $verbString
                         $lastQuality $candQuality $nextQuality $adaptLimitString $candQualityMin $candQualityMax }}
                     {{ end }}
