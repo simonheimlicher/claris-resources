@@ -470,6 +470,18 @@
 
 {{ define "partials/claris/_functions/resources/images/parse-image-alt" }}
   {{ $template := "claris/_functions/resources/images/parse-image-alt" }}
+  {{ $resource := .resource }}
+  {{ with .version }}
+    {{ with .default }}
+      {{ $resource = .resource }}
+    {{ else }}
+      {{ range . }}
+        {{ if not $resource }}
+          {{ $resource = .resource }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
   {{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
     (cond (not .resource) (cond (not .src) "" .src) (printf " resource=%v [%v]" .resource .resource.MediaType) )
     (replaceRE `.*?([^/]+)$` `$1` $template) }}
@@ -489,7 +501,7 @@
         {{ with and $.caption (ge (len $.caption) $minAltLength) }}
           {{ $imgAlt = . }}
         {{ else }}
-          {{ with or $.version.default.resource }}
+          {{ with $resource }}
             {{ $imgAlt = path.BaseName . | humanize | replaceRE `(.*?) [0-9]+[xX][0-9]+(.*)` `$1$2` | strings.FirstUpper }}
             {{ if $debug }}
               {{ warnf "%s Generated 'alt' attribute imgAlt=%q from %v in parsedArgs:\n%v"
