@@ -2,7 +2,7 @@
 {{ $template := "claris/_functions/resources/get-resource" }}
 {{ $page := .Page }}
 {{ $originalPage := default .Page .OriginalPage }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $imageResourceArgs := merge . (dict "Debug" $debug) }}
@@ -33,7 +33,8 @@
       {{ errorf "%s[%s] Need either .resource=%v [%T] or .src=%v [%T]" $page $template .resource .resource .src .src }}
     {{ end }}
   {{ else }}
-    {{ errorf "%s[%s] missing page at which to start lookup: .Page=%q [%T]" $page $template .Page .Page }}
+    {{ errorf "%s[%s] missing page at which to start lookup: .Page=%q [%T]. Initial args:\n%v"
+        $page $template .Page .Page (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) ) }}
   {{ end }}
 {{ end }}
 
@@ -290,7 +291,7 @@
             {{ if $debug }}{{ warnf "%s Found resource %s in site resources matching %s" $dbg . $siteResourceGlob }}{{ end }}
           {{ else }}
             {{ if $debug }}{{ warnf "%s Found resource %s in site resources matching %s but wrong .ResourceType=%s" $dbg . $siteResourceGlob .ResourceType }}{{ end }}
-          {{ end }}          
+          {{ end }}
         {{ else }}
           {{ if $debug }}{{ warnf "%s No resource found in site resources matching %s" $dbg $siteResourceGlob }}{{ end }}
         {{ end }}

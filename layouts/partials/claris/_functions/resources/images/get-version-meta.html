@@ -1,0 +1,51 @@
+{{ $versions := false }}
+{{ $template := "claris/_functions/resources/images/get-version-meta" }}
+{{ $page := .Page }}
+{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
+    (cond (not .resource) (cond (not .src) "" (printf " %v" .src) ) (printf " resource=%v [%v]" .resource .resource.MediaType) )
+    (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{ $versionName := .name }}
+{{ $versionIndex := .index }}
+
+{{ if or .src .resource }}
+  {{ $getResourceArgs := merge $ (dict "resourcetype" "image") }}
+  {{ with $img := partialCached "claris/_functions/resources/get-resource"
+      $getResourceArgs (merge $getResourceArgs (dict "Page" nil) ) }}
+    {{ $aspectRatio := partial "claris/_functions/resources/images/aspect-ratio" $img }}
+    {{ if not $versionName }}
+      {{ if and $versionIndex (gt $versionIndex 0) }}
+        {{ $versionName = printf "aspect_%s" $aspectRatio.human }}
+      {{ else }}
+        {{ $versionName = "default" }}
+      {{ end }}
+    {{ end }}
+    {{ $versionMeta := dict }}
+    {{ range $k, $v := $ }}
+      {{ if not (in (slice "Page" "index" "name" "src" "resource") $k) }}
+        {{ $versionMeta = merge $versionMeta (dict $k $v) }}
+      {{ end }}
+    {{ end }}
+    {{ $versionMeta = merge $versionMeta (dict
+        "index" $versionIndex
+        "resource" $img
+        "aspect" $aspectRatio.human
+        "ratio" $aspectRatio.float
+        "format" $img.MediaType.SubType
+    ) }}
+    {{ $versions = dict $versionName $versionMeta }}
+    {{ if $debug }}
+      {{ warnf "%s returning versionMeta with versionID=%s and resource=%v [%v]:\n%v\nInitial args:\n%v" $dbg
+          $versionName $versionMeta.resource $versionMeta.resource.MediaType
+          (jsonify (dict "indent" "  ") $versions)
+          (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) ) }}
+    {{ end }}
+  {{ else }}
+    {{ errorf `%s invalid .src=%v [%T] .resource=%v [%T]` $dbg .src .src .resource .resource }}
+  {{ end }}
+{{ else }}
+  {{ errorf `%s need either .src=%v [%T] or .resource=%v [%T]` $dbg .src .src .resource .resource }}
+{{ end }}
+
+{{ return $versions }}

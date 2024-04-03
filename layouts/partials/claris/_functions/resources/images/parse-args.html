@@ -82,7 +82,7 @@
 {{ define "partials/claris/_functions/resources/images/parse-image-args" }}
   {{ $template := "claris/_functions/resources/images/parse-image-args" }}
   {{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
-    (cond (not .resource) (cond (not .src) "" .src) (printf " resource=%v [%v]" .resource .resource.MediaType) )
+    (cond (not .resource) (cond (not .src) "" (printf " %v" .src) ) (printf " resource=%v [%v]" .resource .resource.MediaType) )
     (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
   {{ $defaultVersionID := "default" }}
@@ -92,7 +92,7 @@
 
   {{ if and (reflect.IsMap $) $.Page }}
     {{ $page := .Page }}
-    {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+    {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
 
     {{ $args := merge $ (dict "Page" nil) }}
 
@@ -132,19 +132,56 @@
     {{ with $.version }}
       {{ $versions = . }}
     {{ else }}
-      {{ $argsWithoutPage := dict }}
-      {{ range $k, $v := $ }}
-        {{ if not (in (slice "Page") $k) }}
-          {{ $argsWithoutPage = merge $argsWithoutPage (dict $k $v) }}
-        {{ end }}
-      {{ end }}
-
-      {{ $versions = dict $defaultVersionID $argsWithoutPage }}
-
+      {{ $versions = partialCached "claris/_functions/resources/images/get-version-meta" $ $args }}
       {{ if $debug }}
-        {{ warnf "%s Creating .version with .resource=%v in\n%v" $dbg
-            $.resource
-            (jsonify (dict "indent" "  ") $argsWithoutPage) }}
+        {{ warnf "%s Generated versionMeta with .resource=%v:\n%v\nInitial args:\n%v" $dbg
+            $versions.default.resource
+            (jsonify (dict "indent" "  ") $versions)
+            (jsonify (dict "indent" "  ") $args) }}
+      {{ end }}
+    {{ end }}
+
+    {{/* If the value for `ratio` is a slice, we interpret this as a range of ratios
+      and generate versions to span the entire range */}}
+
+    {{ if reflect.IsSlice .ratio }}
+      {{ if (eq (len .ratio) 2) }}
+        {{ $ratioMin := index .ratio 0 | cast.ToFloat }}
+        {{ $ratioMax := index .ratio 1 | cast.ToFloat }}
+        {{ $originalRatios := slice }}
+        {{ $augmentedVersions := dict }}
+        {{ range $versionID, $versionMeta := $versions }}
+          {{ $augmentedVersionMeta := partialCached "claris/_functions/resources/images/get-version-meta" $versionMeta $versionMeta }}
+          {{ $augmentedVersions = merge $augmentedVersions (dict $versionID $augmentedVersionMeta )}}
+        {{ end }}
+        {{ if $debug }}
+          {{ warnf "%s augmented versions:\n%v\nbased on version:\n%v" $dbg
+            (jsonify (dict "indent" "  ") $augmentedVersions)
+            (jsonify (dict "indent" "  ") $versions) }}
+        {{ end }}
+        {{ $versions = $augmentedVersions }}
+        {{/* {{ $versions = (dict
+            "default" (dict
+              "resource" $resource
+              "position" $featureImage.position
+              "ratio" $ratioMin
+            )
+            "original" (dict
+              "resource" $resource
+              "position" $featureImage.position
+              "media" (printf "(min-aspect-ratio: %d / 1)" (int (div $ratioMin 2) ) )
+            )
+            "wide" (dict
+              "resource" $resource
+              "position" $featureImage.position
+              "ratio" $ratioMax
+              "media" (printf "(min-aspect-ratio: %d / 1)" (int (div $ratioMax 2) ) )
+            )
+          ) }} */}}
+
+        {{/* "media" (printf "(min-aspect-ratio: %d / %d)" (int (math.Round (math.Div $resource.Width 2) ) ) (int $resource.Height) ) */}}
+      {{ else }}
+        {{ errorf "%s when .ratio is a slice, it must have two elements: the lower and upper ratio" $dbg }}
       {{ end }}
     {{ end }}
 
@@ -159,7 +196,7 @@
       {{ $augmentedArgs = $augmentedArgsClean }}
     {{ end }}
 
-    {{ if and false $debug }}
+    {{ if and true $debug }}
       {{ warnf "%s Processing versions:\n%v\nfrom initial args:\n%v" $dbg
           (jsonify (dict "indent" "  ") $versions)
           (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) ) }}
@@ -167,7 +204,7 @@
 
     {{ $processedVersions := dict }}
     {{ range $versionID, $versionMeta := $versions }}
-      {{ if and false $debug }}
+      {{ if and true $debug }}
         {{ warnf "%s Processing versionID=%v:\n%v" $dbg
             $versionID (jsonify (dict "indent" "  ") $versionMeta) }}
       {{ end }}
@@ -294,7 +331,7 @@
           (jsonify (dict "indent" "  ") $parsedArgs.version)
           (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
             "resource" (cond (not $.resource) nil
-              (printf " resource=%v [%v]" $.resource $.resource.MediaType))
+              (printf "resource=%v [%v]" $.resource $.resource.MediaType))
             )
           ) ) }}
     {{ end }}
