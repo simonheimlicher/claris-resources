@@ -2,7 +2,11 @@
 {{ $parsedArgs := dict }}
 {{ $page := default page .Page }}
 {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-{{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $resource := .resource }}
+{{ with .version }}
+  {{ $resource = .default }}
+{{ end }}
+{{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) $resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $args := merge $ (dict "Page" nil) }}
 {{/* NOTE: The list of argument names must be kept in sync with template
@@ -40,7 +44,7 @@
   {{ errorf "%s invalid .maxwidth=%v or .maxheight=%v" $dbg .maxwidth .maxheight }}
 {{ end }}
 
-{{ with $img = partialCached "claris/_functions/resources/images/is-image" .resource .resource }}
+{{ with $img = partialCached "claris/_functions/resources/images/is-image" $resource $resource }}
   {{ $originalRatio = div (cast.ToFloat .Width) (cast.ToFloat .Height) }}
   {{/* Constrain to original image dimensions */}}
   {{ $maxWidth = math.Min $maxWidth .Width | cast.ToInt }}

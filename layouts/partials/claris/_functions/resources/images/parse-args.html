@@ -131,11 +131,15 @@
     {{ $versions := dict }}
     {{ with $.version }}
       {{ $versions = . }}
+      {{ if $debug }}
+        {{ warnf "%s Using versions from .version:\n%v\nInitial args:\n%v" $dbg
+            (jsonify (dict "indent" "  ") $versions)
+            (jsonify (dict "indent" "  ") $args) }}
+      {{ end }}
     {{ else }}
       {{ $versions = partialCached "claris/_functions/resources/images/get-version-meta" $ $args }}
       {{ if $debug }}
-        {{ warnf "%s Generated versionMeta with .resource=%v:\n%v\nInitial args:\n%v" $dbg
-            $versions.default.resource
+        {{ warnf "%s Generated versions:\n%v\nInitial args:\n%v" $dbg
             (jsonify (dict "indent" "  ") $versions)
             (jsonify (dict "indent" "  ") $args) }}
       {{ end }}
@@ -151,8 +155,14 @@
         {{ $originalRatios := slice }}
         {{ $augmentedVersions := dict }}
         {{ range $versionID, $versionMeta := $versions }}
-          {{ $augmentedVersionMeta := partialCached "claris/_functions/resources/images/get-version-meta" $versionMeta $versionMeta }}
-          {{ $augmentedVersions = merge $augmentedVersions (dict $versionID $augmentedVersionMeta )}}
+          {{ $versionMeta = merge $versionMeta (dict "name" $versionID) }}
+          {{ $augmentedVersionWithID := partialCached "claris/_functions/resources/images/get-version-meta" $versionMeta $versionMeta }}
+          {{ if $debug }}
+            {{ warnf "%s get-version-meta returned:\n%v\nbased on versionID=%v and versionMeta:\n%v"
+              $dbg (jsonify (dict "indent" "  ") $augmentedVersionWithID) $versionID
+              (jsonify (dict "indent" "  ") $versionMeta) }}
+          {{ end }}
+          {{ $augmentedVersions = merge $augmentedVersions $augmentedVersionWithID }}
         {{ end }}
         {{ if $debug }}
           {{ warnf "%s augmented versions:\n%v\nbased on version:\n%v" $dbg
@@ -185,16 +195,14 @@
       {{ end }}
     {{ end }}
 
-    <!-- Eliminate processed "resource" key -->
-    {{ if isset $ "resource" }}
-      {{ $augmentedArgsClean := dict }}
-      {{ range $k, $v := $augmentedArgs }}
-        {{ if not (in (slice "Page" "resource") $k) }}
-          {{ $augmentedArgsClean = merge $augmentedArgsClean (dict $k $v) }}
-        {{ end }}
+    <!-- Eliminate "Page" and the processed "ratio", "src" and "resource" key -->
+    {{ $augmentedArgsClean := dict }}
+    {{ range $k, $v := $ }}
+      {{ if not (in (slice "Page" "ratio" "src" "resource") $k) }}
+        {{ $augmentedArgsClean = merge $augmentedArgsClean (dict $k $v) }}
       {{ end }}
-      {{ $augmentedArgs = $augmentedArgsClean }}
     {{ end }}
+    {{ $augmentedArgs = $augmentedArgsClean }}
 
     {{ if and true $debug }}
       {{ warnf "%s Processing versions:\n%v\nfrom initial args:\n%v" $dbg
@@ -230,21 +238,31 @@
           ) )
         ) }}
         {{ if and false $debug }}
-          {{ warnf "%s added version meta with resource=%v [%v] to augmentedArgs.version under id=%v:\n%v" $dbg
+          {{ warnf "%s added version meta with resource=%v [%v] to processedVersions under versionID=%v: processedVersions:\n%v" $dbg
               $resource $resource.MediaType $versionID
-              (jsonify (dict "indent" "  ") (merge $augmentedArgs (dict "Page" "omitted")) ) }}
+              (jsonify (dict "indent" "  ") $processedVersions) }}
         {{ end }}
-        {{ $args = $augmentedArgs }}
       {{ else }}
         {{ errorf "%s failed to obtain resource: $.resource=%v $.src=%v" $dbg
             $.resource $.src }}
       {{ end }}
     {{ end }}
 
-    {{ $augmentedArgs = merge $ (dict "version" $processedVersions) }}
-    {{ with and $augmentedArgs.version.default.resource (merge $augmentedArgs (dict "Page" $page) ) }}
-      {{ $parsedArgs = partial "claris/_functions/resources/images/parse-default-args" (dict "args" . "defaults" $defaults) }}
+    {{ $augmentedArgs = merge $augmentedArgs (dict "version" $processedVersions) }}
+    {{ with $augmentedArgs }}
+      {{ if and true $debug }}
+        {{ warnf "%s Done parsing versions; now applying defaults to augmentedArgs:\n%v" $dbg
+            (jsonify (dict "indent" "  ") $augmentedArgs) }}
+      {{ end }}
+
+      {{ $parsedArgs = partial "claris/_functions/resources/images/parse-default-args"
+          (dict "args" (merge $augmentedArgs (dict "Page" $page) ) "defaults" $defaults) }}
       {{ $parsedArgs = partial "claris/_functions/resources/images/parse-image-dimensions" $parsedArgs }}
+
+      {{ if and false $debug }}
+        {{ warnf "%s Done parsing image resources; now parsing remaining arguments in parsedArgs:\n%v" $dbg
+            (jsonify (dict "indent" "  ") (merge $parsedArgs (dict "Page" "omitted") ) ) }}
+      {{ end }}
 
       {{ with .relativewidth }}
         {{ $parsedArgs = merge $parsedArgs (dict
@@ -253,6 +271,7 @@
       {{ end }}
 
       {{ $imgClass := default slice .imgclass }}
+      {{ warnf "%s imgClass=%v" $dbg $imgClass }}
       {{ if not (reflect.IsSlice $imgClass) }}
         {{ $imgClass = slice $imgClass }}
       {{ end }}
@@ -306,28 +325,26 @@
         {{ $parsedArgs = partial "claris/_functions/resources/images/parse-image-alt"
             (merge $parsedArgs (dict "Page" $page) ) }}
       {{ end }}
+
       {{/* Update class lists in $parsedArgs */}}
       {{ $parsedArgs = merge $parsedArgs (dict "class" $imgClass) }}
 
       {{ if $debug }}
-        {{ $initialResourceString := cond (not $.resource) nil
-            (printf "%v [%v]" $.resource $.resource.MediaType) }}
-        {{ $resourceString := $parsedArgs.resource }}
-        {{ with $parsedArgs.resource }}
-          {{ $resourceString = printf "%s [%s]" .Name .MediaType }}
+        {{ $initialArgs := merge $ (dict "Page" "omitted") }}
+        {{ with $initialArgs.resource }}
+          {{ $initialResourceString := cond (not $.resource) nil
+              (printf "%v [%v]" $.resource $.resource.MediaType) }}
+          {{ $initialArgs = merge $initialArgs (dict "resource" $initialResourceString) }}
         {{ end }}
-        {{ warnf "%s parsed args:\n%v\nwith defaults:%v\nReturning parsedArgs:\n%v" $dbg
-            (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
-              "resource" $initialResourceString)) )
+        {{ warnf "%s parsed initial args:\n%v\nwith defaults:%v\nReturning parsedArgs:\n%v" $dbg
+            (jsonify (dict "indent" "  ") $initialArgs )
             (jsonify (dict "indent" "  ") $defaults)
-            (jsonify (dict "indent" "  ") (merge $parsedArgs
-              (dict "resource" $resourceString) ) ) }}
+            (jsonify (dict "indent" "  ") $parsedArgs) }}
       {{ end }}
 
     {{ else }}
 
-      {{ errorf "%s invalid .version.default.resource=%v in .version:\n%v\nfrom initial args:\n%v" $dbg
-          $parsedArgs.version.default.resource
+      {{ errorf "%s invalid .version:\n%v\nfrom initial args:\n%v" $dbg
           (jsonify (dict "indent" "  ") $parsedArgs.version)
           (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
             "resource" (cond (not $.resource) nil
