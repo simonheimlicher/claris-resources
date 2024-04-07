@@ -92,7 +92,7 @@
 
   {{ if and (reflect.IsMap $) $.Page }}
     {{ $page := .Page }}
-    {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+    {{ $debug := and false (or .Debug ($page.Param "clarisdebug") (strings.Contains .src "logo") ) }}
 
     {{ $args := merge $ (dict "Page" nil) }}
 

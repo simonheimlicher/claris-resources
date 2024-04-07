@@ -1,7 +1,7 @@
 {{ $versions := false }}
 {{ $template := "claris/_functions/resources/images/get-version-meta" }}
 {{ $page := .Page }}
-{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
   {{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
     (cond (not .resource) (cond (not .src) "" (printf " %v" .src) ) (printf " resource=%v [%v]" .resource .resource.MediaType) )
     (replaceRE `.*?([^/]+)$` `$1` $template) }}

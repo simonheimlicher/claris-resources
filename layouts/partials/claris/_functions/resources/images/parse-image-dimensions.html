@@ -1,12 +1,24 @@
 {{ $template := "claris/_functions/resources/images/parse-image-dimensions" }}
 {{ $parsedArgs := dict }}
 {{ $page := default page .Page }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $resource := .resource }}
 {{ with .version }}
-  {{ $resource = .default }}
+  {{ with .default }}
+    {{ $resource = .resource }}
+  {{ else }}
+    {{ range $versionID, $versionMeta := . }}
+      {{ if not $resource }}
+        {{ $resource = .resource }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
 {{ end }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) $resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $debugResource := "logo" }}
+{{ $debug := and false (or
+  .Debug ($page.Param "clarisdebug")
+  (and $debugResource (strings.Contains .src $debugResource) (and .resource (strings.Contains .resource.Name $debugResource) ) )
+) }}
 
 {{ $args := merge $ (dict "Page" nil) }}
 {{/* NOTE: The list of argument names must be kept in sync with template
@@ -78,8 +90,8 @@
 {{ $requestRatio := $ratio }}
 
 {{ if and $width $height $ratio }}
-  {{ errorf "%s ignoring .ratio. Please specify only two out of .width=%v .height=%v .ratio=%v"
-      $dbg $width $height $ratio }}
+  {{/* errorf "%s ignoring .ratio. Please specify only two out of .width=%v .height=%v .ratio=%v"
+      $dbg $width $height $ratio */}}
   {{ $requestRatio = false }}
 {{ end }}
 
@@ -99,6 +111,9 @@
   {{ if $requestRatio }}
     {{ $requestWidth = mul $requestHeight $requestRatio | math.Round | cast.ToInt }}
   {{ else }}
+    {{ if or $debug (not $originalRatio) }}
+      {{ warnf "%s mul %d %d" $dbg $requestHeight $originalRatio }}
+    {{ end }}
     {{ $requestWidth = mul $requestHeight $originalRatio | math.Round | cast.ToInt }}
   {{ end }}
 {{ else if $requestRatio }}
