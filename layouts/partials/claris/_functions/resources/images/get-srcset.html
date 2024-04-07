@@ -8,6 +8,7 @@
 {{ $maxWidth := int (default 1.0e9 .maxwidth) }}
 {{ $maxHeight := int (default 1.0e9 .maxheight) }}
 {{ $referenceWidth := int (default 768 .referencewidth) }}
+{{ $responsiveMinWidth := int (default 384 .responsiveminwidth) }}
 
 
 {{ $targetQuality := default "default" .quality }}
@@ -48,7 +49,7 @@
     {{ $defaultFormat = . }}
     {{ if $debug }}
       {{ warnf "%s override defaultFormat=%v based on .format=%v" $dbg
-          $defaultFormat . . }}
+          $defaultFormat . }}
     {{ end }}
   {{ end }}
 {{ else }}
@@ -117,33 +118,31 @@
 
   {{ $maxWidth = math.Min $maxWidth $intermediateFormatBaseImg.Width | cast.ToInt }}
   {{ $roundBase := 2.0 }}
-  {{ $sizeRange := 4.0 }}
-  {{ $numWidths := int (add $sizeRange 1) }}
-  {{ if gt (div $maxWidth $sizeRange) $referenceWidth }}
-    {{ $sizeRange = int (math.Ceil (div $maxWidth $referenceWidth) ) }}
-    {{ $numWidths = int (add $sizeRange 1) }}
-      {{ if $debug }}
-        {{ warnf "%s [%dx%d] Increased sizeRange=%d numSizes=%d"
-          $dbg $maxWidth $intermediateFormatBaseImg.Height $sizeRange $numWidths }}
-      {{ end }}
+  {{ $maxToMinRatio := math.Max 1 (div (float $maxWidth) $responsiveMinWidth) }}
+  {{ $numStepsToDouble := 2 }}
+  {{ $powerBase := math.Pow 2.0 (div 1.0 $numStepsToDouble) }}
+  {{ $numWidths := int (add 1 (math.Ceil (div (math.Log $maxToMinRatio) (math.Log $powerBase) ) ) ) }}
+
+  {{ if gt $numWidths 1 }}
+    {{ $powerBase = math.Pow $maxToMinRatio (div 1.0 (sub $numWidths 1.0) ) }}
+    {{ if $debug }}
+      {{ warnf "%s maxToMinRatio = ceil(%v / %v) = %v" $dbg
+          $maxWidth $responsiveMinWidth $maxToMinRatio }}
+      {{ warnf "%s numWidths = %d = 1 + ceil(log(maxToMinRatio) / log(powerBase) ) [log(maxToMinRatio)=%v log(powerBase)=%v]"
+          $dbg $numWidths (math.Log $maxToMinRatio) (math.Log $powerBase) }}
+    {{ end }}
   {{ end }}
-  {{ $numWidths := int (add $sizeRange 1) }}
 
-  {{/* {{ if $envProd }}
-    {{ $numWidths = 7 }}
-  {{ end }} */}}
+  {{ if $debug }}
+    {{ warnf "%s [%dx%d] using maxToMinRatio=%4.1f numWidths=%d"
+      $dbg $maxWidth $intermediateFormatBaseImg.Height $maxToMinRatio $numWidths }}
+  {{ end }}
 
-  <!-- No changes below this line -->
-  {{ $powerBase := math.Pow $sizeRange (div 1.0 (sub $numWidths 1.0) ) }}
-  {{/* {{ $baseWidthCalculated := div $maxWidth $sizeRange }}
-  {{ $baseWidthCalculatedPrev := div $baseWidthCalculated $powerBase }}
-  {{ $roundToNearest := math.Pow $roundBase (math.Floor (div (math.Log (div (sub $baseWidthCalculated $baseWidthCalculatedPrev) 2) ) (math.Log $roundBase) ) ) }}
-  {{ $baseWidth := int (math.Round (mul (math.Round (div $baseWidthCalculated $roundToNearest) ) $roundToNearest) ) }} */}}
 
   {{ $srcSetWidths := slice }}
 
-  {{/* {{ $widthCalculated := int (div $maxWidth $sizeRange) }} */}}
-  {{ $widthCalculated := $referenceWidth }}
+  {{/* {{ $widthCalculated := int (div $maxWidth $maxToMinRatio) }} */}}
+  {{ $widthCalculated := $responsiveMinWidth }}
   {{ $widthCalculatedPrev := int (div $widthCalculated $powerBase) }}
   {{ $baseWidth := 0 }}
 
@@ -156,7 +155,7 @@
       "webp" (dict
         "min" 1
         "max" 90
-        "kbpermp" 48
+        "kbpermp" 32
       )
     )
     "low" (dict
@@ -194,8 +193,8 @@
 
       {{ if eq $i 0 }}
         {{ $baseWidth = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
-        {{/* {{ warnf "%s\n    maxWidth=%d sizeRange=%d numSizes=%d [baseWidth=%d powerBase=%.2f roundToNearest=%.0f]"
-            $dbg $maxWidth $sizeRange $numWidths $baseWidth $powerBase $roundToNearest }} */}}
+        {{/* {{ warnf "%s\n    maxWidth=%d maxToMinRatio=%d numWidths=%d [baseWidth=%d powerBase=%.2f roundToNearest=%.0f]"
+            $dbg $maxWidth $maxToMinRatio $numWidths $baseWidth $powerBase $roundToNearest }} */}}
       {{ end }}
 
       {{ $width = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
@@ -379,7 +378,10 @@
       {{ $qualityReferenceWidth = $qualitySpec.min }}
       {{ $qualityRange = int (sub $qualitySpec.max $qualitySpec.min) }}
     {{ end }}
-    {{ $qualityStep := div (float $qualityRange) (sub $numWidths 1) }}
+    {{ $qualityStep := 0.0 }}
+    {{ if gt $numWidths 2 }}
+      {{ $qualityStep = div (float $qualityRange) (sub $numWidths 1) }}
+    {{ end }}
 
     {{ $resizedImg := false }}
     {{ $srcSetList := slice }}
@@ -398,7 +400,11 @@
       {{ $resizedImg = partial "claris/_functions/resources/images/process-image" $resizeArgs }}
 
       {{ with $resizedImg }}
-        {{ $srcSetList = append (printf "%s %dw" .RelPermalink $nominalWidth) $srcSetList }}
+        {{ $srcSpec := .RelPermalink }}
+        {{ if gt $numWidths 1 }}
+          {{ $srcSpec = printf "%s %dw" .RelPermalink $nominalWidth }}
+        {{ end }}
+        {{ $srcSetList = append $srcSpec $srcSetList }}
         {{ $sizeKB := div (len .Content) 1024.0 }}
         {{ $sizeMP := div (mul 1.0 .Width .Height) 1000000 }}
         {{ $scaledKBPerMP := div $sizeKB $sizeMP }}
@@ -416,7 +422,7 @@
         {{ $formatParams := (dict
           "resource" $resizedImg
           "format" $targetFormat
-          "srcset" (delimit $srcSetList `, `)
+          "srcset" $srcSetList
           ) }}
         {{ if or false $debug }}
           {{ warnf "%s appending formatParams:\n%v"

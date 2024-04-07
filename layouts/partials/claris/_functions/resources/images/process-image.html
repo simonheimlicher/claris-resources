@@ -118,6 +118,14 @@
           {{ if eq . "center" }}
             {{ $posHorizontal = 0.5 }}
             {{ $posVertical = 0.5 }}
+          {{ else if eq . "left" }}
+            {{ $posHorizontal = 0 }}
+          {{ else if eq . "right" }}
+            {{ $posHorizontal = 1 }}
+          {{ else if eq . "top" }}
+            {{ $posVertical = 0 }}
+          {{ else if eq . "bottom" }}
+            {{ $posVertical = 1.}}
           {{ else if strings.HasSuffix . "%" }}
             {{ $posPercentage := div (strings.TrimRight "%" . | cast.ToFloat) 100 }}
             {{ if or (lt $posPercentage 0) (gt $posPercentage 1) }}

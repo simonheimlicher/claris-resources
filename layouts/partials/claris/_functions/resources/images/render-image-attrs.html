@@ -14,7 +14,7 @@
 {{ $captionElement := dict }}
 
 {{ $defaultVariantName := "default" }}
-{{ $sourceAttributeNames := slice "sizes" "style" }}
+{{ $sourceAttributeNames := slice "style" }}
 {{ $sourceAttributeNamesImg := slice "alt" "fetchpriority" "loading" "title" "class" "data-zoomable" }}
 {{ $sourceAttributeNamesSource := slice "media" }}
 
@@ -140,7 +140,6 @@
             {{ end }}
           {{ end }}
 
-
           {{ $formatSourceAttr := dict }}
           {{/* The partial "claris/_functions/resources/images/get-srcset"
               stores a reference to the last image resource in `.resource`.
@@ -163,7 +162,15 @@
           {{ end }}
 
           {{ with .srcset }}
-            {{ $formatSourceAttr = merge $formatSourceAttr (dict "srcset" . ) }}
+            {{ if gt (len . ) 1 }}
+              {{ $srcSetAttr := delimit . `, ` }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict
+                  "srcset" $srcSetAttr
+                  "sizes" $variantMeta.image.sizes) }}
+            {{ else if eq $elementName "source" }}
+              {{ $formatSourceAttr = merge $formatSourceAttr (dict
+                  "srcset" (index . 0) ) }}
+            {{ end }}
           {{ end }}
 
           {{ $attributeNames := $sourceAttributeNames }}
@@ -173,12 +180,12 @@
             {{ $attributeNames = append $sourceAttributeNamesSource $attributeNames }}
           {{ end }}
           {{ range $k, $v := $variantMeta.image }}
-            {{ if in $attributeNames $k }}
+            {{ if and (in $attributeNames $k) $v }}
               {{ $formatSourceAttr = merge $formatSourceAttr (dict $k $v) }}
             {{ end }}
           {{ end }}
           {{ range $k, $v := $versionFormatSrcSets }}
-            {{ if in $attributeNames $k }}
+            {{ if and (in $attributeNames $k) $v }}
               {{ $formatSourceAttr = merge $formatSourceAttr (dict $k $v) }}
             {{ end }}
           {{ end }}
