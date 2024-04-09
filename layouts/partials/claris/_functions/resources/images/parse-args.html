@@ -27,7 +27,7 @@
     "container" $containerArgs
   ) }}
 
-  {{ if $debug }}
+  {{ if and false $debug }}
     {{ $resourceString := $parsedArgs.resource }}
     {{ with $parsedArgs.resource }}
       {{ $resourceString = printf "%s [%s]" .Name .MediaType }}
@@ -92,7 +92,7 @@
 
   {{ if and (reflect.IsMap $) $.Page }}
     {{ $page := .Page }}
-    {{ $debug := and false (or .Debug ($page.Param "clarisdebug") (strings.Contains .src "logo") ) }}
+    {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
 
     {{ $args := merge $ (dict "Page" nil) }}
 
@@ -131,14 +131,14 @@
     {{ $versions := dict }}
     {{ with $.version }}
       {{ $versions = . }}
-      {{ if $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s Using versions from .version:\n%v\nInitial args:\n%v" $dbg
             (jsonify (dict "indent" "  ") $versions)
             (jsonify (dict "indent" "  ") $args) }}
       {{ end }}
     {{ else }}
       {{ $versions = partialCached "claris/_functions/resources/images/get-version-meta" $ $args }}
-      {{ if $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s Generated versions:\n%v\nInitial args:\n%v" $dbg
             (jsonify (dict "indent" "  ") $versions)
             (jsonify (dict "indent" "  ") $args) }}
@@ -150,46 +150,95 @@
 
     {{ if reflect.IsSlice .ratio }}
       {{ if (eq (len .ratio) 2) }}
+        {{ $numVersions := len $versions }}
         {{ $ratioMin := index .ratio 0 | cast.ToFloat }}
         {{ $ratioMax := index .ratio 1 | cast.ToFloat }}
-        {{ $originalRatios := slice }}
         {{ $augmentedVersions := dict }}
         {{ range $versionID, $versionMeta := $versions }}
           {{ $versionMeta = merge $versionMeta (dict "name" $versionID) }}
           {{ $augmentedVersionWithID := partialCached "claris/_functions/resources/images/get-version-meta" $versionMeta $versionMeta }}
-          {{ if $debug }}
+          {{ if and false $debug }}
             {{ warnf "%s get-version-meta returned:\n%v\nbased on versionID=%v and versionMeta:\n%v"
               $dbg (jsonify (dict "indent" "  ") $augmentedVersionWithID) $versionID
               (jsonify (dict "indent" "  ") $versionMeta) }}
           {{ end }}
-          {{ $augmentedVersions = merge $augmentedVersions $augmentedVersionWithID }}
+          {{ $augmentedVersions = merge $augmentedVersionWithID $augmentedVersions }}
         {{ end }}
-        {{ if $debug }}
+        {{ if and false $debug }}
           {{ warnf "%s augmented versions:\n%v\nbased on version:\n%v" $dbg
             (jsonify (dict "indent" "  ") $augmentedVersions)
             (jsonify (dict "indent" "  ") $versions) }}
         {{ end }}
-        {{ $versions = $augmentedVersions }}
-        {{/* {{ $versions = (dict
-            "default" (dict
-              "resource" $resource
-              "position" $featureImage.position
-              "ratio" $ratioMin
-            )
-            "original" (dict
-              "resource" $resource
-              "position" $featureImage.position
-              "media" (printf "(min-aspect-ratio: %d / 1)" (int (div $ratioMin 2) ) )
-            )
-            "wide" (dict
-              "resource" $resource
-              "position" $featureImage.position
-              "ratio" $ratioMax
-              "media" (printf "(min-aspect-ratio: %d / 1)" (int (div $ratioMax 2) ) )
-            )
-          ) }} */}}
 
-        {{/* "media" (printf "(min-aspect-ratio: %d / %d)" (int (math.Round (math.Div $resource.Width 2) ) ) (int $resource.Height) ) */}}
+        {{ $derivedVersions := slice }}
+        {{ range $versionIdx, $versionMeta := sort $augmentedVersions "ratio" "asc" }}
+          {{ $resource := $versionMeta.resource }}
+          {{ if ge $versionMeta.ratio $ratioMin }}
+            {{ if le $versionMeta.ratio $ratioMax }}
+              {{ if $debug }}
+                {{ warnf "%s versionID=%v: ratio=%.2f is within ratio range [%.1f %.1f]:\n%v" $dbg
+                  $versionMeta.name $versionMeta.ratio $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
+                }}
+              {{ end }}
+              {{ if eq (len $derivedVersions) 0 }}
+                {{/* As this is the first version we add, we mark it as default */}}
+                {{ $minRatioVersionMeta := merge $versionMeta (dict
+                    "name" $defaultVersionID
+                    "aspect" nil
+                    "ratio" $ratioMin
+                ) }}
+                {{ $derivedVersions = append $minRatioVersionMeta $derivedVersions }}
+              {{ else }}
+                {{ $versionMeta = merge $versionMeta (dict
+                    "name" (printf "aspect_%s" $versionMeta.aspect)
+                    "media" (printf "(min-aspect-ratio: %d / %d)"
+                      (int (math.Round (math.Div $resource.Width 2) ) )
+                      (int $resource.Height) )
+                ) }}
+                {{ $derivedVersions = append $versionMeta $derivedVersions }}
+              {{ end }}
+              {{ if eq $versionIdx (sub $numVersions 1) }}
+                {{/* This is the last version */}}
+                {{ $maxRatioVersionMeta := merge $versionMeta (dict
+                    "name" (printf "aspect_%s" $versionMeta.aspect)
+                    "aspect" nil
+                    "ratio" $ratioMax
+                ) }}
+                {{ $derivedVersions = append $maxRatioVersionMeta $derivedVersions }}
+              {{ end }}
+            {{ else }}
+
+              {{ if $debug }}
+                {{ warnf "%s augmented versionID=%v is above ratio range [%.1f %.1f]:\n%v" $dbg
+                  $versionMeta.name $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
+                }}
+              {{ end }}
+
+              {{ $maxRatioVersionMeta := merge $versionMeta (dict
+                  "target" (dict "ratio" $ratioMax)
+              ) }}
+              {{ $derivedVersions = append $maxRatioVersionMeta $derivedVersions }}
+
+              {{ $versionMeta = merge $versionMeta (dict
+                  "media" (printf "(min-aspect-ratio: %d / 1)" (int (div $ratioMin 2) ) )
+              ) }}
+              {{ $derivedVersions = append $versionMeta $derivedVersions }}
+
+            {{ end }}
+          {{ else }}
+            {{ $derivedVersions = append $versionMeta $derivedVersions }}
+          {{ end }}
+
+        {{ end }}
+
+        {{ if $debug }}
+          {{ warnf "%s derived versions:\n%v\nbased on augmented versions:\n%v" $dbg
+            (jsonify (dict "indent" "  ") $derivedVersions)
+            (jsonify (dict "indent" "  ") $augmentedVersions) }}
+        {{ end }}
+
+        {{ $versions = $derivedVersions }}
+
       {{ else }}
         {{ errorf "%s when .ratio is a slice, it must have two elements: the lower and upper ratio" $dbg }}
       {{ end }}
@@ -204,17 +253,17 @@
     {{ end }}
     {{ $augmentedArgs = $augmentedArgsClean }}
 
-    {{ if and true $debug }}
+    {{ if and false $debug }}
       {{ warnf "%s Processing versions:\n%v\nfrom initial args:\n%v" $dbg
           (jsonify (dict "indent" "  ") $versions)
           (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) ) }}
     {{ end }}
 
     {{ $processedVersions := dict }}
-    {{ range $versionID, $versionMeta := $versions }}
+    {{ range $versionIdx, $versionMeta := $versions }}
       {{ if and true $debug }}
         {{ warnf "%s Processing versionID=%v:\n%v" $dbg
-            $versionID (jsonify (dict "indent" "  ") $versionMeta) }}
+            $versionMeta.name (jsonify (dict "indent" "  ") $versionMeta) }}
       {{ end }}
       {{ $resource := .resource }}
       {{ if not $resource }}
@@ -233,13 +282,13 @@
       {{ end }}
 
       {{ with $resource }}
-        {{ $processedVersions = merge $processedVersions (dict $versionID (merge $versionMeta (dict
+        {{ $processedVersions = merge $processedVersions (dict $versionMeta.name (merge $versionMeta (dict
             "resource" $resource
           ) )
         ) }}
-        {{ if and false $debug }}
+        {{ if and true $debug }}
           {{ warnf "%s added version meta with resource=%v [%v] to processedVersions under versionID=%v: processedVersions:\n%v" $dbg
-              $resource $resource.MediaType $versionID
+              $resource $resource.MediaType $versionMeta.name
               (jsonify (dict "indent" "  ") $processedVersions) }}
         {{ end }}
       {{ else }}
@@ -250,7 +299,7 @@
 
     {{ $augmentedArgs = merge $augmentedArgs (dict "version" $processedVersions) }}
     {{ with $augmentedArgs }}
-      {{ if and true $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s Done parsing versions; now applying defaults to augmentedArgs:\n%v" $dbg
             (jsonify (dict "indent" "  ") $augmentedArgs) }}
       {{ end }}
@@ -328,7 +377,7 @@
       {{/* Update class lists in $parsedArgs */}}
       {{ $parsedArgs = merge $parsedArgs (dict "class" $imgClass) }}
 
-      {{ if $debug }}
+      {{ if and false $debug }}
         {{ $initialArgs := merge $ (dict "Page" "omitted") }}
         {{ with $initialArgs.resource }}
           {{ $initialResourceString := cond (not $.resource) nil

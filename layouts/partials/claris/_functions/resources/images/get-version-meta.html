@@ -29,6 +29,7 @@
     {{ end }}
     {{ $versionMeta = merge $versionMeta (dict
         "index" $versionIndex
+        "name" $versionName
         "resource" $img
         "aspect" $aspectRatio.human
         "ratio" $aspectRatio.float
