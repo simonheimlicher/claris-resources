@@ -319,6 +319,12 @@
         ) }}
       {{ end }}
 
+      {{ with .position }}
+        {{ $parsedArgs = merge $parsedArgs (dict
+            "style" (printf "object-fit: cover; object-position: %v" . )
+        ) }}
+      {{ end }}
+
       {{ $imgClass := default slice .imgclass }}
       {{ if not (reflect.IsSlice $imgClass ) }}
         {{ $imgClass = slice $imgClass }}
