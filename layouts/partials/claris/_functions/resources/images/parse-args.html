@@ -171,64 +171,91 @@
         {{ end }}
 
         {{ $derivedVersions := slice }}
+
+        {{/* Maximum height of the image relative to the viewport height */}}
+        {{ $maxRelativeHeight := default 0.5 .relativeheight | float }}
+
+        {{ $unmodifiedVersionMeta := false }}
         {{ range $versionIdx, $versionMeta := sort $augmentedVersions "ratio" "asc" }}
           {{ $resource := $versionMeta.resource }}
-          {{ if ge $versionMeta.ratio $ratioMin }}
-            {{ if le $versionMeta.ratio $ratioMax }}
+          {{ if eq (len $derivedVersions) 0 }}
+            {{/* The first version is rendered as default, without a `media` attribute.
+            Since this is the version rendered on mobile phones in portrait orientation,
+            we want it to be rendered without any slack. For this reason, we crop it to
+            the aspect ratio $ratioMin */}}
+            {{/* Determine if the version's aspect ratio deviates too much from $ratioMin
+            and needs to be cropped */}}
+            {{ if (gt (pow (sub (div $versionMeta.ratio $ratioMin) 1) 2) 0.01) }}
+              {{ $minProcessArgs := merge $versionMeta (dict "ratio" $ratioMin) }}
+              {{ $minRatioResource := partial "claris/_functions/resources/images/process-image" $minProcessArgs }}
+              {{/* {{ $minProcessArgs := merge $versionMeta (dict "target" (dict "ratio" $ratioMin) ) }}
+              {{ $minRatioResource := $resource }} */}}
+              {{ $minRatioAspectRatio := partial "claris/_functions/resources/images/aspect-ratio" $minRatioResource }}
+              {{ $minRatioVersionMeta := merge $versionMeta (dict
+                "resource" $minRatioResource
+                "name" $defaultVersionID
+                "index" (len $derivedVersions)
+                "aspect" $minRatioAspectRatio.human
+                "ratio" $minRatioAspectRatio.float
+              ) }}
+              {{ $derivedVersions = append $minRatioVersionMeta $derivedVersions }}
               {{ if $debug }}
-                {{ warnf "%s versionID=%v: ratio=%.2f is within ratio range [%.1f %.1f]:\n%v" $dbg
-                  $versionMeta.name $versionMeta.ratio $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
+                {{ warnf "%s versionID=%v: version ratio=%.2f cropped to %.4g to cover [%.4g %.4g]:\n%v" $dbg
+                  $versionMeta.name $versionMeta.ratio $minRatioVersionMeta.ratio
+                  $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
                 }}
-              {{ end }}
-              {{ if eq (len $derivedVersions) 0 }}
-                {{/* As this is the first version we add, we mark it as default */}}
-                {{ $minRatioVersionMeta := merge $versionMeta (dict
-                    "name" $defaultVersionID
-                    "aspect" nil
-                    "ratio" $ratioMin
-                ) }}
-                {{ $derivedVersions = append $minRatioVersionMeta $derivedVersions }}
-              {{ else }}
-                {{ $versionMeta = merge $versionMeta (dict
-                    "name" (printf "aspect_%s" $versionMeta.aspect)
-                    "media" (printf "(min-aspect-ratio: %d / %d)"
-                      (int (math.Round (math.Div $resource.Width 2) ) )
-                      (int $resource.Height) )
-                ) }}
-                {{ $derivedVersions = append $versionMeta $derivedVersions }}
-              {{ end }}
-              {{ if eq $versionIdx (sub $numVersions 1) }}
-                {{/* This is the last version */}}
-                {{ $maxRatioVersionMeta := merge $versionMeta (dict
-                    "name" (printf "aspect_%s" $versionMeta.aspect)
-                    "aspect" nil
-                    "ratio" $ratioMax
-                ) }}
-                {{ $derivedVersions = append $maxRatioVersionMeta $derivedVersions }}
               {{ end }}
             {{ else }}
-
+              {{ $unmodifiedVersionMeta = $versionMeta }}
+              {{ $derivedVersions = append $versionMeta $derivedVersions }}
               {{ if $debug }}
-                {{ warnf "%s augmented versionID=%v is above ratio range [%.1f %.1f]:\n%v" $dbg
-                  $versionMeta.name $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
+                {{ warnf "%s versionID=%v: version ratio=%.2f used unmodified to cover [%.4g %.4g]:\n%v" $dbg
+                  $versionMeta.name $versionMeta.ratio
+                  $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
                 }}
               {{ end }}
-
-              {{ $maxRatioVersionMeta := merge $versionMeta (dict
-                  "target" (dict "ratio" $ratioMax)
-              ) }}
-              {{ $derivedVersions = append $maxRatioVersionMeta $derivedVersions }}
-
-              {{ $versionMeta = merge $versionMeta (dict
-                  "media" (printf "(min-aspect-ratio: %d / 1)" (int (div $ratioMin 2) ) )
-              ) }}
-              {{ $derivedVersions = append $versionMeta $derivedVersions }}
-
             {{ end }}
-          {{ else }}
+          {{ end }}
+
+          {{/* Add the uncropped version unless it has already been added */}}
+          {{ if not $unmodifiedVersionMeta }}
+            {{ $previousVersion := index $derivedVersions (sub (len $derivedVersions) 1) }}
+            {{ $breakpointRatio := mul $maxRelativeHeight $previousVersion.ratio }}
+            {{ $mediaRatioFraction := partial "claris/_functions/resources/images/get-ratio-fraction" $breakpointRatio }}
+            {{ $versionMeta = merge $versionMeta (dict
+              "name" (printf "ratio_%.4g" $versionMeta.ratio)
+              "index" (len $derivedVersions)
+              "media" (printf "(min-aspect-ratio: %s)" $mediaRatioFraction.fraction)
+            ) }}
             {{ $derivedVersions = append $versionMeta $derivedVersions }}
           {{ end }}
 
+          {{ if eq $versionIdx (sub $numVersions 1) }}
+            {{/* This is the last version */}}
+            {{ $maxProcessArgs := merge $versionMeta (dict "ratio" $ratioMax) }}
+            {{ $maxRatioResource := partial "claris/_functions/resources/images/process-image" $maxProcessArgs }}
+            {{/* {{ $maxProcessArgs := merge $versionMeta (dict "target" (dict "ratio" $ratioMax) ) }}
+            {{ $maxRatioResource := $resource }} */}}
+            {{ $maxRatioAspectRatio := partial "claris/_functions/resources/images/aspect-ratio" $maxRatioResource }}
+            {{ $maxRatioVersionMeta := merge $versionMeta (dict
+              "resource" $maxRatioResource
+              "name" (printf "ratio_%.4g" $maxRatioAspectRatio.float)
+              "index" (len $derivedVersions)
+              "aspect" $maxRatioAspectRatio.human
+              "ratio" $maxRatioAspectRatio.float
+            ) }}
+            {{ if gt (len $derivedVersions) 0 }}
+              {{/* Use this version when the screen ratio exceeds
+                the aspect of the previous version */}}
+              {{ $previousVersion := index $derivedVersions (sub (len $derivedVersions) 1) }}
+              {{ $breakpointRatio := mul $maxRelativeHeight $previousVersion.ratio }}
+              {{ $mediaRatioFraction := partial "claris/_functions/resources/images/get-ratio-fraction" $breakpointRatio }}
+              {{ $maxRatioVersionMeta = merge $maxRatioVersionMeta (dict
+                "media" (printf "(min-aspect-ratio: %s)" $mediaRatioFraction.fraction)
+              ) }}
+            {{ end }}
+            {{ $derivedVersions = append $maxRatioVersionMeta $derivedVersions }}
+          {{ end }}
         {{ end }}
 
         {{ if $debug }}

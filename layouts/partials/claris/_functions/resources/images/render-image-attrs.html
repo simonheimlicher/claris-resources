@@ -1,6 +1,6 @@
 {{ $template := "claris/_functions/resources/images/render-image-attrs" }}
 {{ $page := default page .Page }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
 {{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $containerElement := dict }}
@@ -50,7 +50,7 @@
     {{ $versionsWithFormats := slice }}
     {{ range $versionID, $versionMeta := $variantMeta.image.version }}
 
-      {{ $versionSrcSetArgs := merge $variantSrcSetArgs (dict "version" nil) $versionMeta }}
+      {{ $versionSrcSetArgs := merge $variantSrcSetArgs (dict "version" nil "target" nil) $versionMeta }}
       {{ if $versionMeta.resource }}
         {{ if and false $debug }}
           {{ warnf "%s calling get-srcset with versionSrcSetArgs:\n%v" $dbg
@@ -61,15 +61,13 @@
 
         {{ with partialCached "claris/_functions/resources/images/get-srcset"
             (merge $versionSrcSetArgs (dict "Page" $page) ) $versionSrcSetArgs }}
-          {{ $versioWithFormats := merge $versionMeta (dict "formats" . ) }}
-          {{/* The default version is the first item and we need to render it
-          as an `img` element as the last element of <picture>. For this reason,
-          we reverse the order of the versions here */}}
-          {{ $versionsWithFormats = append $versionsWithFormats (slice $versioWithFormats) }}
-          {{ if and false $debug }}
+          {{ $versionWithFormats := merge $versionMeta (dict "formats" . ) }}
+          {{ $versionsWithFormats = append $versionWithFormats $versionsWithFormats }}
+          {{ if and true $debug }}
             {{ warnf "%s get-srcset with versionSrcSetArgs:\n%v\nreturned:\n%v" $dbg
                 (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
-                  (dict "resource" (printf "%s [%s]" $versionSrcSetArgs.resource.Name
+                  (dict "resource" (printf "%s %dx%d [%s]" $versionSrcSetArgs.resource.Name
+                    $versionSrcSetArgs.resource.Width $versionSrcSetArgs.resource.Height
                     $versionSrcSetArgs.resource.MediaType))))
                 (jsonify (dict "indent" "  ") . ) }}
           {{ end }}
@@ -86,9 +84,15 @@
       {{ end }}
     {{ end }}
 
+    {{/* The default version is the first item and we need to render it
+    as an `img` element as the last element of <picture>. For this reason,
+    we move it from the first to the last position  */}}
+    {{ $numVersionsWithFormats := len $versionsWithFormats }}
+    {{ $versionsWithFormats = append (first 1 $versionsWithFormats) (last (sub $numVersionsWithFormats 1) $versionsWithFormats) }}
+
     {{ with $versionsWithFormats }}
 
-      {{ if and false $debug }}
+      {{ if and true $debug }}
         {{ warnf "%s generated versionsWithFormats:\n%v" $dbg (jsonify (dict "indent" "  ") $versionsWithFormats) }}
       {{ end }}
 

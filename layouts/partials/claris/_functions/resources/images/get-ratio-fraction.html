@@ -1,0 +1,91 @@
+{{ $template := "claris/_functions/resources/images/get-ratio-fraction" }}
+{{ $debug := and true (page.Param "clarisdebug") }}
+{{ $dbg := printf "%s [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{ $aspectRatio := dict }}
+
+{{ $aspectRatioFloat := float . }}
+
+{{ $aspectRatioRounded := div (math.Round (mul $aspectRatioFloat 1000) ) 1000 }}
+{{ $aspectRatioInteger := slice 0 0}}
+
+{{ $aspectRatios := (slice
+  (slice 1 1)
+  (slice 5 6)
+  (slice 4 5)
+  (slice 3 4)
+  (slice 2 3)
+  (slice 3 5)
+  (slice 9 16)
+  (slice 1 2)
+  (slice 1 3)
+  (slice 1 4)
+  (slice 1 5)
+  (slice 1 6)
+  (slice 1 7)
+  (slice 1 8)
+  (slice 1 9)
+  (slice 1 10)
+) }}
+
+
+{{ $candMatch := (dict
+  "Deviation" 100.0
+  "AspectRatio" false
+) }}
+
+{{ $tallRatio := $aspectRatioFloat }}
+{{ if gt $aspectRatioFloat 1.0 }}
+  {{ $tallRatio = div 1 $aspectRatioFloat }}
+{{ end }}
+
+
+{{ $bestMatch := false }}
+
+{{ range $aspectRatios }}
+  {{ if not $bestMatch }}
+    {{ $candAspect := div (float (index . 0)) (index . 1) }}
+    {{ $deviation := math.Pow (sub (div $candAspect $tallRatio) 1) 2 }}
+    {{ if (lt $deviation $candMatch.Deviation) }}
+      {{ if $debug }}
+        {{ warnf "%s candAspect=%0.4f deviation=%0.4f candMatch=%#v" $dbg $candAspect $deviation $candMatch }}
+      {{ end }}
+      {{ $candMatch = (dict
+        "Deviation" $deviation
+        "AspectRatio" .
+      ) }}
+    {{ else }}
+      {{ $bestMatch = $candMatch }}
+      {{ if $debug }}
+        {{ warnf "%s bestAspect=%0.4f deviation=%0.4f bestMatch=%v" $dbg $candAspect $deviation $bestMatch }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ $aspectRatioInteger = $bestMatch.AspectRatio }}
+{{ if gt $aspectRatioFloat 1.0 }}
+  {{ $aspectRatioInteger = slice (index $aspectRatioInteger 1) (index $aspectRatioInteger 0) }}
+{{ end }}
+
+{{ $aspectRatioHuman := (printf "%dx%d" (index $aspectRatioInteger 0) (index $aspectRatioInteger 1) ) }}
+{{ $aspectRatioFraction := (printf "%d / %d" (index $aspectRatioInteger 0) (index $aspectRatioInteger 1) ) }}
+{{ if $debug }}
+  {{ warnf "%s aspectRatio=%0.4f: integer=%v fraction=%s"
+      $dbg $aspectRatioFloat $aspectRatioInteger $aspectRatioFraction }}
+{{ end }}
+
+{{ if and (gt (index $aspectRatioInteger 0) 0) (gt (index $aspectRatioInteger 1) 0) }}
+  {{ $aspectRatio = (dict
+    "integer" $aspectRatioInteger
+    "human" $aspectRatioHuman
+    "fraction" $aspectRatioFraction
+    "float" $aspectRatioFloat
+    "rounded" $aspectRatioRounded
+  ) }}
+{{ else }}
+  {{ errorf "%s invalid ratio='%v'[%T]" $dbg $aspectRatioFloat }}
+{{ end }}
+
+{{ return $aspectRatio }}
+

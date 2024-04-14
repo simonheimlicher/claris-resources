@@ -1,5 +1,5 @@
 
-{{ $template := "claris/_functions/resources/images/image-srcset" }}
+{{ $template := "claris/_functions/resources/images/get-placeholder" }}
 {{ $imageFormatSrcsets := dict }}
 {{ $page := default page .Page }}
 {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
