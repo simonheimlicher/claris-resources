@@ -190,7 +190,7 @@
               {{ $minRatioResource := partial "claris/_functions/resources/images/process-image" $minProcessArgs }}
               {{/* {{ $minProcessArgs := merge $versionMeta (dict "target" (dict "ratio" $ratioMin) ) }}
               {{ $minRatioResource := $resource }} */}}
-              {{ $minRatioAspectRatio := partial "claris/_functions/resources/images/aspect-ratio" $minRatioResource }}
+              {{ $minRatioAspectRatio := partial "claris/_functions/resources/images/get-ratio-fraction" $minRatioResource }}
               {{ $minRatioVersionMeta := merge $versionMeta (dict
                 "resource" $minRatioResource
                 "name" $defaultVersionID
@@ -236,7 +236,7 @@
             {{ $maxRatioResource := partial "claris/_functions/resources/images/process-image" $maxProcessArgs }}
             {{/* {{ $maxProcessArgs := merge $versionMeta (dict "target" (dict "ratio" $ratioMax) ) }}
             {{ $maxRatioResource := $resource }} */}}
-            {{ $maxRatioAspectRatio := partial "claris/_functions/resources/images/aspect-ratio" $maxRatioResource }}
+            {{ $maxRatioAspectRatio := partial "claris/_functions/resources/images/get-ratio-fraction" $maxRatioResource }}
             {{ $maxRatioVersionMeta := merge $versionMeta (dict
               "resource" $maxRatioResource
               "name" (printf "ratio_%.4g" $maxRatioAspectRatio.float)

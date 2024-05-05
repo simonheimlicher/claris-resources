@@ -3,8 +3,18 @@
 {{ $dbg := printf "%s [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $aspectRatio := dict }}
-
-{{ $aspectRatioFloat := float . }}
+{{ $arg := . }}
+{{ $aspectRatioFloat := 1.0 }}
+{{ with printf "%T" $arg }}
+  {{ if strings.Contains . "resources.resourceAdapter" }}
+    {{ $aspectRatioFloat = (div (float $arg.Width) $arg.Height) }}
+  {{ else if strings.Contains . "float" }}
+    {{ $aspectRatioFloat = float $arg }}
+  {{ else }}
+    {{ errorf "%s unable to get ratio fraction from arg=%v [type=%T] need type 'resources.resourceAdapter' or 'float64'"
+        $dbg $arg $arg }}
+  {{ end }}
+{{ end }}
 
 {{ $aspectRatioRounded := div (math.Round (mul $aspectRatioFloat 1000) ) 1000 }}
 {{ $aspectRatioInteger := slice 0 0}}
@@ -44,11 +54,12 @@
 
 {{ range $aspectRatios }}
   {{ if not $bestMatch }}
-    {{ $candAspect := div (float (index . 0)) (index . 1) }}
-    {{ $deviation := math.Pow (sub (div $candAspect $tallRatio) 1) 2 }}
+    {{ $candRatio := div (float (index . 0)) (index . 1) }}
+    {{ $deviation := math.Pow (sub (div $candRatio $tallRatio) 1) 2 }}
     {{ if (lt $deviation $candMatch.Deviation) }}
       {{ if $debug }}
-        {{ warnf "%s candAspect=%0.4f deviation=%0.4f candMatch=%#v" $dbg $candAspect $deviation $candMatch }}
+        {{ warnf "%s candidate ratio=%0.4g deviation=%0.4g cand aspect=%v deviation=%0.4g"
+            $dbg $candRatio $deviation $candMatch.AspectRatio $candMatch.Deviation }}
       {{ end }}
       {{ $candMatch = (dict
         "Deviation" $deviation
@@ -57,10 +68,29 @@
     {{ else }}
       {{ $bestMatch = $candMatch }}
       {{ if $debug }}
-        {{ warnf "%s bestAspect=%0.4f deviation=%0.4f bestMatch=%v" $dbg $candAspect $deviation $bestMatch }}
+        {{ warnf "%s candidate ratio=%0.4g deviation=%0.4g deviates more than best aspect=%v deviation=%0.4g"
+            $dbg $candRatio $deviation $bestMatch.AspectRatio $bestMatch.Deviation }}
       {{ end }}
     {{ end }}
   {{ end }}
+{{ end }}
+
+{{/* If the deviation is too large, we use a non-standard aspect ratio */}}
+{{ $maxDeviation := 0.0001 }}
+{{ if gt $bestMatch.Deviation $maxDeviation }}
+    {{ $candRatioNumerator := 1024 }}
+    {{ $candRatioDenominator := int (math.Round (mul $aspectRatioFloat $candRatioNumerator) ) }}
+    {{ $customRatio := div (float $candRatioNumerator) $candRatioDenominator }}
+    {{ $customAspect := slice $candRatioNumerator $candRatioDenominator }}
+    {{ $customRatioDeviation := math.Pow (sub (div $customRatio $tallRatio) 1) 2 }}
+    {{ if $debug }}
+      {{ warnf "%s best aspect=%v deviation=%0.4g > %0.4g: custom aspect=%v deviation=%0.4g"
+          $dbg $bestMatch.AspectRatio $bestMatch.Deviation $maxDeviation $customAspect $customRatioDeviation }}
+    {{ end }}
+    {{ $bestMatch = (dict
+      "Deviation" $customRatioDeviation
+      "AspectRatio" $customAspect
+    ) }}
 {{ end }}
 
 {{ $aspectRatioInteger = $bestMatch.AspectRatio }}
@@ -71,7 +101,7 @@
 {{ $aspectRatioHuman := (printf "%dx%d" (index $aspectRatioInteger 0) (index $aspectRatioInteger 1) ) }}
 {{ $aspectRatioFraction := (printf "%d / %d" (index $aspectRatioInteger 0) (index $aspectRatioInteger 1) ) }}
 {{ if $debug }}
-  {{ warnf "%s aspectRatio=%0.4f: integer=%v fraction=%s"
+  {{ warnf "%s input ratio=%0.4g mapped to: integer=%v fraction=%s"
       $dbg $aspectRatioFloat $aspectRatioInteger $aspectRatioFraction }}
 {{ end }}
 

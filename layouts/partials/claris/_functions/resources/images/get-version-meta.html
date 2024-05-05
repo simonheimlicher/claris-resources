@@ -13,7 +13,7 @@
   {{ $getResourceArgs := merge $ (dict "resourcetype" "image") }}
   {{ with $img := partialCached "claris/_functions/resources/get-resource"
       $getResourceArgs (merge $getResourceArgs (dict "Page" nil) ) }}
-    {{ $aspectRatio := partial "claris/_functions/resources/images/aspect-ratio" $img }}
+    {{ $aspectRatio := partial "claris/_functions/resources/images/get-ratio-fraction" $img }}
     {{ if not $versionName }}
       {{ if and $versionIndex (gt $versionIndex 0) }}
         {{ $versionName = printf "aspect_%s" $aspectRatio.human }}
