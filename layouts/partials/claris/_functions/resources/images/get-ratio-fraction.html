@@ -1,5 +1,5 @@
 {{ $template := "claris/_functions/resources/images/get-ratio-fraction" }}
-{{ $debug := and true (page.Param "clarisdebug") }}
+{{ $debug := and false (page.Param "clarisdebug") }}
 {{ $dbg := printf "%s [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{ $aspectRatio := dict }}

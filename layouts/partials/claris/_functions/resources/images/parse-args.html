@@ -92,7 +92,7 @@
 
   {{ if and (reflect.IsMap $) $.Page }}
     {{ $page := .Page }}
-    {{ $debug := and true (or .Debug ($page.Param "clarisdebug") ) }}
+    {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 
     {{ $args := merge $ (dict "Page" nil) }}
 
@@ -200,7 +200,7 @@
               ) }}
               {{ $derivedVersions = append $minRatioVersionMeta $derivedVersions }}
               {{ if $debug }}
-                {{ warnf "%s versionID=%v: version ratio=%.2f cropped to %.4g to cover [%.4g %.4g]:\n%v" $dbg
+                {{ warnf "%s versionID=%v: version ratio=%.4g cropped to %.4g to cover the minimum ratio in [%.4g %.4g]:\n%v" $dbg
                   $versionMeta.name $versionMeta.ratio $minRatioVersionMeta.ratio
                   $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
                 }}
@@ -209,7 +209,7 @@
               {{ $unmodifiedVersionMeta = $versionMeta }}
               {{ $derivedVersions = append $versionMeta $derivedVersions }}
               {{ if $debug }}
-                {{ warnf "%s versionID=%v: version ratio=%.2f used unmodified to cover [%.4g %.4g]:\n%v" $dbg
+                {{ warnf "%s versionID=%v: version ratio=%.4g used unmodified to cover the minimum ratio in [%.4g %.4g]:\n%v" $dbg
                   $versionMeta.name $versionMeta.ratio
                   $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
                 }}
@@ -227,6 +227,12 @@
               "index" (len $derivedVersions)
               "media" (printf "(min-aspect-ratio: %s)" $mediaRatioFraction.fraction)
             ) }}
+            {{ if $debug }}
+              {{ warnf "%s versionID=%v: version ratio=%.4g added unmodified as it is between [%.4g %.4g]:\n%v" $dbg
+                $versionMeta.name $versionMeta.ratio
+                $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
+              }}
+            {{ end }}
             {{ $derivedVersions = append $versionMeta $derivedVersions }}
           {{ end }}
 
@@ -253,6 +259,12 @@
               {{ $maxRatioVersionMeta = merge $maxRatioVersionMeta (dict
                 "media" (printf "(min-aspect-ratio: %s)" $mediaRatioFraction.fraction)
               ) }}
+            {{ end }}
+            {{ if $debug }}
+              {{ warnf "%s versionID=%v: version ratio=%.4g cropped to %.4g to cover the maximum ratio in [%.4g %.4g]:\n%v" $dbg
+                $versionMeta.name $versionMeta.ratio $maxRatioVersionMeta.ratio
+                $ratioMin $ratioMax (jsonify (dict "indent" "  ") $versionMeta)
+              }}
             {{ end }}
             {{ $derivedVersions = append $maxRatioVersionMeta $derivedVersions }}
           {{ end }}

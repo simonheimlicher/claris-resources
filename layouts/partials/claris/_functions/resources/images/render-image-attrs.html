@@ -18,14 +18,20 @@
 {{ $sourceAttributeNamesImg := slice "alt" "fetchpriority" "loading" "title" "class" "data-zoomable" }}
 {{ $sourceAttributeNamesSource := slice "media" }}
 
-{{ $parsedArgs := partialCached "claris/_functions/resources/images/parse-args"
-     (merge $ (dict "Page" $page) ) (merge $ (dict "Page" nil) ) }}
+{{ $parsedArgs := dict }}
+{{ if (or $.resource $.src $.version) }}
+  {{ $parsedArgs = partialCached "claris/_functions/resources/images/parse-args"
+      (merge $ (dict "Page" $page) ) (merge $ (dict "Page" nil) ) }}
 
-{{ if and false $debug }}
-  {{ warnf "%s called parse-args with:\n%v\nNow generating attributes for render-image with parsedArgs:\n%v" $dbg
-      (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
-        "resource" (cond (not .resource) .resource (printf "%v [%v]" .resource .resource.MediaType) )) ) )
-      (jsonify (dict "indent" "  ") $parsedArgs) }}
+  {{ if and false $debug }}
+    {{ warnf "%s called parse-args with:\n%v\nNow generating attributes for render-image with parsedArgs:\n%v" $dbg
+        (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
+          "resource" (cond (not .resource) .resource (printf "%v [%v]" .resource .resource.MediaType) )) ) )
+        (jsonify (dict "indent" "  ") $parsedArgs) }}
+  {{ end }}
+{{ else }}
+  {{ errorf "%s Missing argument .resource or .src or .version in initial args:\n%v" $dbg
+      (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) }}
 {{ end }}
 
 {{ $sourceChildren := slice }}
@@ -41,7 +47,7 @@
 
   {{ $variants := dict $defaultVariantName . }}
 
-  {{ if and true $debug }}
+  {{ if and false $debug }}
     {{ warnf "%s gathering source child elements for variants:\n%v"
         $dbg (jsonify (dict "indent" "  ") $variants ) }}
   {{ end }}
@@ -63,7 +69,7 @@
             (merge $versionSrcSetArgs (dict "Page" $page) ) $versionSrcSetArgs }}
           {{ $versionWithFormats := merge $versionMeta (dict "formats" . ) }}
           {{ $versionsWithFormats = append $versionWithFormats $versionsWithFormats }}
-          {{ if and true $debug }}
+          {{ if and false $debug }}
             {{ warnf "%s get-srcset with versionSrcSetArgs:\n%v\nreturned:\n%v" $dbg
                 (jsonify (dict "indent" "  ") (merge $versionSrcSetArgs
                   (dict "resource" (printf "%s %dx%d [%s]" $versionSrcSetArgs.resource.Name
@@ -92,7 +98,7 @@
 
     {{ with $versionsWithFormats }}
 
-      {{ if and true $debug }}
+      {{ if and false $debug }}
         {{ warnf "%s generated versionsWithFormats:\n%v" $dbg (jsonify (dict "indent" "  ") $versionsWithFormats) }}
       {{ end }}
 
@@ -270,7 +276,7 @@
     "attr" $containerAttr
     "children" $containerChildren
   ) }}
-  {{ if $debug }}
+  {{ if and false $debug }}
     {{ warnf "%s containerElement=%v: attr:\n%v\nchildren:\n%v" $dbg
         $containerElementName
         (jsonify (dict "indent" "  ") $containerAttr)
@@ -282,7 +288,7 @@
   ) }}
 {{ end }}
 
-{{ if $debug }}
+{{ if and false $debug }}
   {{ warnf "%s returning containerElement:\n%v" $dbg (jsonify (dict "indent" "  ") $containerElement ) }}
 {{ end }}
 

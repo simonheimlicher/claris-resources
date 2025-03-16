@@ -3,8 +3,14 @@
 {{- $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
 {{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
-{{- with $imageAttributes := partialCached "claris/_functions/resources/images/render-image-attrs" . (merge . (dict "Page" nil) ) }}
-  {{- partialCached "claris/_components/render-element" (merge . (dict "Page" $page) ) (merge . (dict "Page" nil) ) }}
+{{- if (or $.resource $.src $.version) }}
+  {{- with $imageAttributes := partialCached "claris/_functions/resources/images/render-image-attrs" $ (merge . (dict "Page" nil) ) }}
+    {{- partialCached "claris/_components/render-element" (merge . (dict "Page" $page) ) (merge . (dict "Page" nil) ) }}
+  {{- else }}
+    {{- errorf "%s render-image-attributes returned %v [type=%T]. Initial args:\n%v" $dbg . .
+        (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) }}
+  {{- end}}
 {{- else }}
-  {{- errorf "%s render-image-attributes returned %v [type=%T]" $dbg . . }}
-{{- end}}
+  {{ errorf "%s Missing argument .resource or .src or .version in initial args:\n%v" $dbg
+      (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) }}
+{{- end -}}

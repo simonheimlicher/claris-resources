@@ -2,10 +2,10 @@
 {{ $template := "claris/_functions/resources/images/get-version-meta" }}
 {{ $page := .Page }}
 {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-  {{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
-    (cond (not .resource) (cond (not .src) "" (printf " %v" .src) ) (printf " resource=%v [%v]" .resource .resource.MediaType) )
-    (replaceRE `.*?([^/]+)$` `$1` $template) }}
-
+{{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
+  (cond (not .resource) (cond (not .src) "" (printf " %v" .src) ) (printf " resource=%v [%v]" .resource .resource.MediaType) )
+  (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $args := merge $ (dict "page" $page.RelPermalink) }}
 {{ $versionName := .name }}
 {{ $versionIndex := .index }}
 
@@ -43,10 +43,10 @@
           (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted") ) ) }}
     {{ end }}
   {{ else }}
-    {{ errorf `%s invalid .src=%v [%T] .resource=%v [%T]` $dbg .src .src .resource .resource }}
+    {{ errorf `%s get-resource failed with .src=%v [%T] .resource=%v [%T]` $dbg .src .src .resource .resource }}
   {{ end }}
 {{ else }}
-  {{ errorf `%s need either .src=%v [%T] or .resource=%v [%T]` $dbg .src .src .resource .resource }}
+  {{ errorf `%s need either .src=%v [%T] or .resource=%v [%T]. Params:\n%v` $dbg .src .src .resource .resource $args }}
 {{ end }}
 
 {{ return $versions }}
