@@ -7,7 +7,7 @@
 
 {{ $maxWidth := int (default 1.0e9 .maxwidth) }}
 {{ $maxHeight := int (default 1.0e9 .maxheight) }}
-{{ $referenceWidth := int (default 768 .referencewidth) }}
+{{ $referenceWidth := int (default 384 .referencewidth) }}
 
 {{ $formatSrcsets := slice }}
 
@@ -49,7 +49,7 @@
     {{ $defaultFormat = . }}
     {{ if $debug }}
       {{ warnf "%s override defaultFormat=%v based on .format=%v" $dbg
-          $defaultFormat . . }}
+          $defaultFormat . }}
     {{ end }}
   {{ end }}
 {{ else }}
@@ -132,17 +132,12 @@
 
   {{ $maxWidth = math.Min $maxWidth $intermediateFormatBaseImg.Width | cast.ToInt }}
   {{ $roundBase := 2.0 }}
-  {{ $sizeRange := 4.0 }}
-  {{ $numWidths := int (add $sizeRange 1) }}
-  {{ if gt (div $maxWidth $sizeRange) $referenceWidth }}
-    {{ $sizeRange = int (math.Ceil (div $maxWidth $referenceWidth) ) }}
-    {{ $numWidths = int (add $sizeRange 1) }}
-      {{ if $debug }}
-        {{ warnf "%s [%dx%d] Increased sizeRange=%d numSizes=%d"
-          $dbg $maxWidth $intermediateFormatBaseImg.Height $sizeRange $numWidths }}
-      {{ end }}
+  {{ $sizeRange := int (math.Ceil (div $maxWidth $referenceWidth) ) }}
+  {{ $numWidths := mul (add $sizeRange 1) 2 }}
+  {{ if $debug }}
+    {{ warnf "%s [%dx%d] sizeRange=%d numSizes=%d"
+      $dbg $maxWidth $intermediateFormatBaseImg.Height $sizeRange $numWidths }}
   {{ end }}
-  {{ $numWidths := int (add $sizeRange 1) }}
 
   {{/* {{ if $envProd }}
     {{ $numWidths = 7 }}
@@ -150,14 +145,9 @@
 
   <!-- No changes below this line -->
   {{ $powerBase := math.Pow $sizeRange (div 1.0 (sub $numWidths 1.0) ) }}
-  {{/* {{ $baseWidthCalculated := div $maxWidth $sizeRange }}
-  {{ $baseWidthCalculatedPrev := div $baseWidthCalculated $powerBase }}
-  {{ $roundToNearest := math.Pow $roundBase (math.Floor (div (math.Log (div (sub $baseWidthCalculated $baseWidthCalculatedPrev) 2) ) (math.Log $roundBase) ) ) }}
-  {{ $baseWidth := int (math.Round (mul (math.Round (div $baseWidthCalculated $roundToNearest) ) $roundToNearest) ) }} */}}
 
   {{ $srcSetWidths := slice }}
 
-  {{/* {{ $widthCalculated := int (div $maxWidth $sizeRange) }} */}}
   {{ $widthCalculated := $referenceWidth }}
   {{ $widthCalculatedPrev := int (div $widthCalculated $powerBase) }}
   {{ $baseWidth := 0 }}
@@ -205,22 +195,38 @@
         {{ $widthCalculated = int (mul $baseWidth (math.Pow $powerBase $i)) }}
       {{ end }}
       <!-- roundToNearest = roundBase ^ floor( ln( (width_{n+1} - width_n) / 2)  / ln(roundBase) ) -->
-      {{ $roundToNearest := math.Pow $roundBase (math.Floor (div (math.Log (div (sub $widthCalculated $widthCalculatedPrev) 2) ) (math.Log $roundBase) ) ) }}
+      {{ $avgPrevCurrent := div (sub $widthCalculated $widthCalculatedPrev) 2.0 }}
+      {{ $roundToNearest := math.Pow $roundBase (math.Floor (div (math.Log $avgPrevCurrent ) (math.Log $roundBase) ) ) }}
 
-      {{ if eq $i 0 }}
-        {{ $baseWidth = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
-        {{/* {{ warnf "%s\n    maxWidth=%d sizeRange=%d numSizes=%d [baseWidth=%d powerBase=%.2f roundToNearest=%.0f]"
-            $dbg $maxWidth $sizeRange $numWidths $baseWidth $powerBase $roundToNearest }} */}}
+      {{ if $debug }}
+        {{ warnf "%s\n    i=%d: maxWidth=%d sizeRange=%d numSizes=%d [baseWidth=%d powerBase=%.2f prev=%d current=%d avgPrevCurrent=%.0f roundToNearest=%.0f]"
+            $dbg $i $maxWidth $sizeRange $numWidths $baseWidth $powerBase
+            $widthCalculated $widthCalculatedPrev $avgPrevCurrent $roundToNearest }}
       {{ end }}
 
-      {{ $width = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
+      <!-- In the first iteration, we initialize the baseWidth -->
+      {{ if eq $i 0 }}
+        {{ if eq $sizeRange 1 }}
+          {{ $baseWidth = $referenceWidth }}
+        {{ else }}
+          {{ $baseWidth = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
+        {{ end }}
+      {{ end }}
+
+      {{ if eq $sizeRange 1 }}
+        {{ $width = $widthCalculated }}
+      {{ else }}
+        {{ $width = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
+      {{ end }}
       {{ $widthCalculatedPrev = $width }}
 
     {{ else }}
       {{ $width = $maxWidth }}
     {{ end }}
-
-    {{ $srcSetWidths = $srcSetWidths | append $width }}
+    {{ if gt $width $maxWidth }}
+      {{ errorf "%s BUG: width=%v exceeds maxWidth=%v" $dbg $width $maxWidth }}
+    {{ end }}
+    {{ $srcSetWidths = append $width $srcSetWidths }}
   {{ end }}
 
   {{ range $targetFormat := $targetFormats }}
@@ -413,15 +419,20 @@
       {{ $resizedImg = partial "claris/_functions/resources/images/process-image" $resizeArgs }}
 
       {{ with $resizedImg }}
-        {{ $srcSetList = append (printf "%s %dw" .RelPermalink $nominalWidth) $srcSetList }}
-        {{ $sizeKB := div (len .Content) 1024.0 }}
-        {{ $sizeMP := div (mul 1.0 .Width .Height) 1000000 }}
-        {{ $scaledKBPerMP := div $sizeKB $sizeMP }}
-        {{ if $debug }}
-          {{ warnf "%s %s[%dx%d]->%v=%v[%4dx%4d] size=%#5.1fkB %4.1fMP kB/MP=%4.1f qualitySpec=[%2d,%2d] quality=%2d | range=%2d step=%2.2f\nurl: %q\n%v"
-            $dbg
-            $formatBaseImg.MediaType.SubType $formatBaseImg.Width $formatBaseImg.Height $targetFormat $resizedImg.MediaType.SubType $resizedImg.Width $resizedImg.Height
-            $sizeKB $sizeMP $scaledKBPerMP $qualitySpec.min $qualitySpec.max $quality $qualityRange $qualityStep $resizedImg.RelPermalink (jsonify (dict "indent" "  ") $resizeArgs) }}
+        {{ if eq $resizedImg.Width $nominalWidth }}
+          {{ $srcSetList = append (printf "%s %dw" .RelPermalink $nominalWidth) $srcSetList }}
+          {{ $sizeKB := div (len .Content) 1024.0 }}
+          {{ $sizeMP := div (mul 1.0 .Width .Height) 1000000 }}
+          {{ $scaledKBPerMP := div $sizeKB $sizeMP }}
+          {{ if $debug }}
+            {{ warnf "%s %s[%dx%d]->%v=%v[%4dx%4d] size=%#5.1fkB %4.1fMP kB/MP=%4.1f qualitySpec=[%2d,%2d] quality=%2d | range=%2d step=%2.2f\nurl: %q\n%v"
+              $dbg
+              $formatBaseImg.MediaType.SubType $formatBaseImg.Width $formatBaseImg.Height $targetFormat $resizedImg.MediaType.SubType $resizedImg.Width $resizedImg.Height
+              $sizeKB $sizeMP $scaledKBPerMP $qualitySpec.min $qualitySpec.max $quality $qualityRange $qualityStep $resizedImg.RelPermalink (jsonify (dict "indent" "  ") $resizeArgs) }}
+          {{ end }}
+        {{ else }}
+          {{ errorf "%s BUG: failed to resize image to width=%v: .Width=%v"
+              $dbg $nominalWidth $resizedImg.Width }}
         {{ end }}
       {{ end }}
     {{ end }}
@@ -433,9 +444,9 @@
           "format" $targetFormat
           "srcset" (delimit $srcSetList `, `)
           ) }}
-        {{ if or false $debug }}
+        {{ if and false $debug }}
           {{ warnf "%s appending formatParams:\n%v"
-              $dbg (jsonify (dict "indent" "  ") $formatParams) }}
+              $dbg $formatParams }}
         {{ end }}
         {{ $formatSrcsets = append (slice $formatParams) $formatSrcsets }}
       {{ else }}
