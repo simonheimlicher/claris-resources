@@ -33,6 +33,11 @@
       {{- warnf "%s rendering %d children:\n%v" $dbg (len . ) (jsonify (dict "indent" "  ") . ) }}
     {{- end }}
     {{- range $childIdx, $childElement := . }}
+      {{- if $debug }}
+        {{- warnf "%s childIdx=%d childElement=%v: calling claris/_components/render-element with parameters:\n%v"
+            $dbg $childIdx $childElement
+            (jsonify (dict "indent" "  ") (merge . (dict "index" $childIdx "Page" $page) ) ) }}
+      {{- end }}
       {{- partialCached "claris/_components/render-element" (merge . (dict "index" $childIdx "Page" $page) ) . }}
     {{- end }}
   {{- end }}

@@ -4,6 +4,9 @@
 {{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 {{- if (or $.resource $.src $.version) }}
+  {{- if $debug }}
+    {{ warnf "%s resource=%v src=%v version=%v" $dbg $.resource $.src $.version }}
+  {{- end }}
   {{- with $imageAttributes := partialCached "claris/_functions/resources/images/render-image-attrs" $ (merge . (dict "Page" nil) ) }}
     {{- partialCached "claris/_components/render-element" (merge . (dict "Page" $page) ) (merge . (dict "Page" nil) ) }}
   {{- else }}
