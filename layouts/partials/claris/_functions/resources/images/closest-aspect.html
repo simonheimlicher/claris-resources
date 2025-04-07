@@ -29,8 +29,10 @@
     {{- with $targetHeight }}
       {{- $dbg = printf "%s targetHeight=%v" $dbg .}}
     {{- end }}
-    {{- warnf "%s find closest match in versions:\n%v"
-        $dbg (jsonify (dict "indent" "  ") $versions) }}
+    {{- if false }}
+      {{- warnf "%s find closest match in versions:\n%v"
+          $dbg (jsonify (dict "indent" "  ") $versions) }}
+    {{- end }}
   {{- end }}
 
   {{- range $versionID, $versionMeta := $versions }}
@@ -38,36 +40,40 @@
     {{- $candDeviation := math.Pow (sub (div $candAspect $targetAspect ) 1) 2 }}
 
     {{- with .resource }}
+      {{- $widthRatio := 1.0 }}
+      {{- $heightRatio := 1.0 }}
+      {{- $sizeRatio := 1.0 }}
       {{- if le $candDeviation $lowestAspectDeviation }}
-        {{- $widthRatio := 1.0 }}
+        {{- $widthRatio = 1.0 }}
         {{- if $targetWidth }}
           {{- $widthRatio = div (cast.ToFloat .Width) (cast.ToFloat $targetWidth) }}
         {{- end }}
-        {{- $heightRatio := 1.0 }}
+        {{- $heightRatio = 1.0 }}
         {{- if $targetHeight }}
           {{- $heightRatio = div (cast.ToFloat .Height) (cast.ToFloat $targetHeight) }}
         {{- end }}
-        {{- $sizeRatio := (mul (math.Pow $widthRatio 2) (math.Pow $heightRatio 2) ) }}
-        {{- if ge $sizeRatio $greatestSizeRatio }}
+        {{- $sizeRatio = (mul (math.Pow $widthRatio 2) (math.Pow $heightRatio 2) ) }}
+        {{- if or (gt $sizeRatio 0.95) (ge $sizeRatio $greatestSizeRatio) }}
           {{- $bestMatchVersionMeta = $versionMeta }}
           {{- $lowestAspectDeviation = $candDeviation}}
           {{- $greatestSizeRatio = $sizeRatio }}
-          {{- if $debug }}
-            {{- warnf "%s valid cand: %vx%v aspect=%.3f aspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f"
-                $dbg .Width .Height
-                $candAspect $candDeviation
-                $widthRatio $heightRatio $sizeRatio }}
+          {{- if and false $debug }}
+            {{- warnf "%s valid cand: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
+                $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
+                $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
           {{- end }}
         {{- else }}
           {{- if $debug }}
-            {{- warnf "%s too small: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f"
-                $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation }}
+            {{- warnf "%s too small: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
+                $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
+                $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
           {{- end }}
         {{- end }}
       {{- else }}
         {{- if $debug }}
-          {{- warnf "%s ignoring cand: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f"
-              $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation }}
+          {{- warnf "%s ignoring cand: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
+              $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
+              $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
         {{- end }}
       {{- end }}
     {{- else }}
@@ -82,6 +88,11 @@
       "aspectdeviation" $lowestAspectDeviation
       "sizeratio" $greatestSizeRatio
     ) }}
+    {{- if $debug }}
+      {{- warnf "%s returning bestMatchVersion [%dx%d format=%s]:\n%v"
+          $dbg $bestMatchVersion.meta.resource.Width $bestMatchVersion.meta.resource.Height $bestMatchVersion.meta.resource.MediaType.Type
+          (jsonify (dict "indent" "  ") $bestMatchVersion) }}
+    {{- end }}
   {{- else }}
     {{- errorf "%s failed to find an image in versions\n%v\nmatching params\n%v"
         $dbg (jsonify (dict "indent" "  ") $versions) (jsonify (dict "indent" "  ") $matchParams) }}
