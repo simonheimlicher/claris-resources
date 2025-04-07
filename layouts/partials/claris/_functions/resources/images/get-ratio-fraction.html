@@ -7,7 +7,8 @@
 {{ $aspectRatioFloat := 1.0 }}
 {{ with printf "%T" $arg }}
   {{ if strings.Contains . "resources.resourceAdapter" }}
-    {{ $aspectRatioFloat = (div (float $arg.Width) $arg.Height) }}
+    {{ $dim := partial "claris/_functions/resources/images/get-dimensions" $arg }}
+    {{ $aspectRatioFloat = $dim.ratio }}
   {{ else if strings.Contains . "float" }}
     {{ $aspectRatioFloat = float $arg }}
   {{ else }}

@@ -3,15 +3,18 @@
 {{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
   (cond (not .resource) (cond (not .src) "" .src) (printf " resource=%v [%v]" .resource .resource.MediaType) )
   (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $debug := false }}
 
+{{ $imageArgs := false }}
 {{ $parsedArgs := dict }}
 {{ if and (reflect.IsMap $) $.Page }}
   {{ $page := .Page }}
-  {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-  {{ $imageArgs := partial "claris/_functions/resources/images/parse-image-args" . }}
-  {{ if $imageArgs.Page }}
-    {{ errorf "%s parse-image-args returned .Page" $dbg }}
-  {{ end }}
+  {{ $debug = and false (or .Debug ($page.Param "clarisdebug") ) }}
+  {{ $imageArgs = partial "claris/_functions/resources/images/parse-image-args" . }}
+{{ else }}
+  {{ errorf `%s pass a map of arguments to parse and include context under key "Page"` $dbg }}
+{{ end }}
+{{ if $imageArgs }}
   {{ $processingArgs := partial "claris/_functions/resources/images/parse-processing-args" . }}
   {{ if $processingArgs.Page }}
     {{ errorf "%s parse-processing-args returned .Page" $dbg }}
@@ -38,7 +41,8 @@
       ) }}
   {{ end }}
 {{ else }}
-  {{ errorf `%s pass a map of arguments to parse and include context under key "Page"` $dbg }}
+  {{ errorf "%s missing image resource: .src=%v .resource=%v" $dbg
+      .src .resource }}
 {{ end }}
 
 {{ return $parsedArgs }}
@@ -84,19 +88,24 @@
   {{ $dbg := printf "%s%v [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink)
     (cond (not .resource) (cond (not .src) "" (printf " %v" .src) ) (printf " resource=%v [%v]" .resource .resource.MediaType) )
     (replaceRE `.*?([^/]+)$` `$1` $template) }}
+  {{ $debug := false }}
 
+  {{ $page := false }}
   {{ $defaultVersionID := "default" }}
   {{ $shapeAttributes := slice "round" }}
 
+  {{ $defaults := false }}
+  {{ $versions := false }}
   {{ $parsedArgs := dict }}
+  {{ $augmentedArgs := dict }}
 
   {{ if and (reflect.IsMap $) $.Page }}
-    {{ $page := .Page }}
-    {{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+    {{ $page = .Page }}
+    {{ $debug = and false (or .Debug ($page.Param "clarisdebug") ) }}
 
     {{ $args := merge $ (dict "Page" nil) }}
 
-    {{ $defaults := (dict
+    {{ $defaults = (dict
       "src" nil
       "resource" nil
       "version" nil
@@ -127,8 +136,6 @@
       "imgclass" (slice "responsive")
     ) }}
 
-    {{ $augmentedArgs := dict }}
-    {{ $versions := dict }}
     {{ with $.version }}
       {{ $versions = . }}
       {{ if and false $debug }}
@@ -138,13 +145,17 @@
       {{ end }}
     {{ else }}
       {{ $versions = partialCached "claris/_functions/resources/images/get-version-meta" $ $args }}
-      {{ if and false $debug }}
+      {{ if and true $debug }}
         {{ warnf "%s Generated versions:\n%v\nInitial args:\n%v" $dbg
             (jsonify (dict "indent" "  ") $versions)
             (jsonify (dict "indent" "  ") $args) }}
       {{ end }}
     {{ end }}
+  {{ else }}
+    {{ errorf `%s pass a map of arguments to parse and include context under key "Page"` $dbg }}
+  {{ end }}
 
+  {{ if $versions }}
     {{/* If the value for `ratio` is a slice, we interpret this as a range of ratios
       and generate versions to span the entire range */}}
 
@@ -188,8 +199,6 @@
             {{ if (gt (pow (sub (div $versionMeta.ratio $ratioMin) 1) 2) 0.01) }}
               {{ $minProcessArgs := merge $versionMeta (dict "ratio" $ratioMin) }}
               {{ $minRatioResource := partial "claris/_functions/resources/images/process-image" $minProcessArgs }}
-              {{/* {{ $minProcessArgs := merge $versionMeta (dict "target" (dict "ratio" $ratioMin) ) }}
-              {{ $minRatioResource := $resource }} */}}
               {{ $minRatioAspectRatio := partial "claris/_functions/resources/images/get-ratio-fraction" $minRatioResource }}
               {{ $minRatioVersionMeta := merge $versionMeta (dict
                 "resource" $minRatioResource
@@ -447,7 +456,10 @@
     {{ end }}
 
   {{ else }}
-    {{ errorf `%s pass a map of arguments to parse and include context under key "Page"` $dbg }}
+    {{ if $debug }}
+      {{ warnf "%s missing image resource: .src=%v .resource=%v" $dbg .src .resource }}
+    {{ end }}
+    {{ $parsedArgs = false }}
   {{ end }}
   {{ return $parsedArgs }}
 {{ end }}

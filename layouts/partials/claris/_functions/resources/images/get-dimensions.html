@@ -1,0 +1,64 @@
+{{ $template := "claris/_functions/resources/images/get-dimensions" }}
+{{ $debug := and false (page.Param "clarisdebug") }}
+{{ $dbg := printf "%s [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{ $supportedRasterImageFormats := (slice "tiff" "jpeg" "jpg" "png" "gif" "webp") }}
+{{ $dim := dict }}
+{{ $arg := . }}
+{{ $width := false }}
+{{ $height := false }}
+{{ $maxWidth := false }}
+{{ $maxHeight:= false }}
+{{ $aspectRatioFloat := 1.0 }}
+{{ with printf "%T" $arg }}
+  {{ if strings.Contains . "resources.resourceAdapter" }}
+    {{ if in $supportedRasterImageFormats $arg.MediaType.SubType }}
+      {{ $width = $arg.Width }}
+      {{ $height = $arg.Height }}
+      {{ $maxWidth = $arg.Width }}
+      {{ $maxHeight = $arg.Height }}
+    {{ else if eq $arg.MediaType.SubType "svg" }}
+      {{ $svgContent := $arg.Content }}
+      {{ $viewBoxSizes := split (index (split (index (split $svgContent `viewBox=`) 1) `"`) 1) ` ` }}
+      {{ $width = index $viewBoxSizes 2 | cast.ToInt }}
+      {{ $height = index $viewBoxSizes 3 | cast.ToInt }}
+      {{ if $debug }}
+        {{ warnf "%s viewBoxSizes=%#v width=%#v height=%#v" $dbg $viewBoxSizes $width $height }}
+      {{ end }}
+      {{/* SVG is scalable, so we set maxWidth and maxHeight to 0 */}}
+      {{ $maxWidth = 0 }}
+      {{ $maxHeight = 0 }}
+    {{ else }}
+      {{ errorf "%s unable to get dimensions from arg=%v [type=%T] .MediaType.SubType=%v must be in %v"
+          $dbg $arg $arg $arg.MediaType.SubType $supportedRasterImageFormats }}
+    {{ end }}
+    {{ with and $width $height }}
+      {{ $aspectRatioFloat = div (float $width) (float $height) }}
+    {{ else }}
+      {{ errorf "%s unable to get dimensions from arg=%v [type=%T] need type 'resources.resourceAdapter' referencing an image with width and height or an SVG with a viewBox"
+          $dbg $arg $arg }}
+    {{ end }}
+  {{ else }}
+    {{ errorf "%s unable to get dimensions from arg=%v [type=%T] need type 'resources.resourceAdapter'"
+        $dbg $arg $arg }}
+  {{ end }}
+{{ end }}
+
+{{ $dim = (dict
+    "ratio" $aspectRatioFloat
+    "width" $width
+    "height" $height
+) }}
+
+{{ with and $maxWidth $maxHeight }}
+  {{ $dim = merge $dim (dict
+      "maxwidth" $maxWidth
+      "maxheight" $maxHeight
+  ) }}
+{{ end }}
+
+{{ if $debug }}
+  {{ warnf "%s returning\n%v" $dbg (jsonify (dict "indent" "  ") $dim) }}
+{{ end }}
+
+{{ return $dim }}

@@ -1,8 +1,12 @@
 {{ $img := false }}
-{{ if strings.Contains (printf "%T" . ) "resources.resourceAdapter" }}
-  {{ if eq .ResourceType "image" }}
-    {{ if and (gt .Width 0) (gt .Height 0) }}
-      {{ $img = . }}
+{{ with $resource := . }}
+  {{ if strings.Contains (printf "%T" . ) "resources.resourceAdapter" }}
+    {{ if eq $resource.ResourceType "image" }}
+      {{ with partial "claris/_functions/resources/images/get-dimensions" $resource }}
+        {{ if and (gt .width 0) (gt .height 0) }}
+          {{ $img = $resource }}
+        {{ end }}
+      {{ end }}
     {{ end }}
   {{ end }}
 {{ end }}
