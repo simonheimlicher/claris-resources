@@ -22,10 +22,10 @@
 {{ end }}
 
 {{ with $processImageArgs.resource }}
-  {{ with $img = partialCached "claris/_functions/resources/images/is-processable-image" . .Name .RelPermalink }}
+  {{ with $img = partialCached "claris/_functions/resources/images/is-processable-image" . .Name }}
   {{ else }}
     {{ errorf `%s invalid .resource=%v [%T]` $dbg . . }}
-    {{ with partialCached "claris/_functions/resources/images/is-image" . .Name .RelPermalink }}
+    {{ with partialCached "claris/_functions/resources/images/is-image" . .Name }}
       {{ errorf "%s format=%v of source image %v is not supported" $dbg .MediaType.SubType . }}
     {{ end }}
   {{ end }}
