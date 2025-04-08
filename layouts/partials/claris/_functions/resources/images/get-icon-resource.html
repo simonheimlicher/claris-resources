@@ -1,0 +1,132 @@
+{{ $iconResource := false }}
+{{ $page := default page .Page }}
+{{ $template := "claris/_functions/resources/images/get-icon-resource" }}
+{{ $debug := and false ($page.Param "clarisdebug") }}
+{{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+
+{{/* Find the image file designated to be used as an icon, turn it into a resource
+so we can fingerprint it and allow indefinite caching */}}
+
+{{/* Based on [How to Favicon in 2025: Three files that fit most needs](
+https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-most-needs) */}}
+
+{{ $staticSubPath := "site-meta" }}
+{{ with .pathprefix }}
+  {{ $staticSubPath = . | strings.TrimLeft "/" | strings.TrimRight "/" | relURL }}
+  {{ if $debug }}
+    {{ warnf `%s page.Param "meta.favicon.pathprefix"='%v' staticSubPath='%v'` $dbg (page.Param "meta.favicon.pathprefix") $staticSubPath }}
+  {{ end }}
+{{ end }}
+{{ $staticDir := path.Join "static" $staticSubPath }}
+
+{{ $assetsSubPath := "site-meta" }}
+{{ with .pathprefix }}
+  {{ $assetsSubPath = . | strings.TrimLeft "/" | strings.TrimRight "/" | relURL }}
+  {{ if $debug }}
+    {{ warnf `%s page.Param "meta.favicon.pathprefix"='%v' assetsSubPath='%v'` $dbg (page.Param "meta.favicon.pathprefix") $assetsSubPath }}
+  {{ end }}
+{{ end }}
+
+{{ $iconBaseNameRegex := `.*icon.*` }} {{/* Default regex for matching icon files */}}
+{{ $iconBaseNameGlob := "icon*" }} {{/* Default glob pattern for matching icon files */}}
+{{ with .match }}
+  {{ $iconBaseNameGlob = . }}
+  {{ $iconBaseNameRegex = replaceRE `[?]+` `.` $iconBaseNameGlob | replaceRE `[*]+` `.*` }}
+  {{ if $debug }}
+    {{ warnf "%s .match='%s' iconGlob='%s' iconBaseNameRegex='%s'" $dbg . $iconBaseNameGlob $iconBaseNameRegex }}
+  {{ end }}
+{{ end }}
+
+{{ $imageFormats := (slice "svg" "png") }}
+
+{{/* If the static icon sub path exists, look for the largest icon matching the glob */}}
+{{ $staticIconFile := false }}
+{{ if fileExists $staticDir }}
+  {{ if $debug }}
+    {{ warnf "%s Looking for icon files in %s" $dbg $staticDir }}
+  {{ end }}
+  {{ with $staticFiles := readDir $staticDir }}
+    {{ range $format := $imageFormats }}
+      {{ if not $staticIconFile }}
+        {{ $formatRegex := printf `(?i)^%s\.%s$` $iconBaseNameRegex . }}
+        {{ with $formatCandidateFiles := where $staticFiles "Name" "like" $formatRegex }}
+          {{ if $debug }}
+            {{ warnf "%s formatCandidateFiles:\n%#v" $dbg $formatCandidateFiles }}
+          {{ end }}
+          {{ $staticIconSize := 0 }}
+          {{ range $formatCandidateFiles }}
+            {{ if $debug }}
+              {{ warnf "%s Found static icon file %s with .Size=%d" $dbg .Name .Size }}
+            {{ end }}
+            {{ if gt .Size $staticIconSize }}
+              {{ $staticIconSize = .Size }}
+              {{ $staticIconFile = . }}
+            {{ end }}
+          {{ end }}
+        {{ else }}
+          {{ if $debug }}
+            {{ warnf "%s No static icon files matching %s in %s:" $dbg $formatRegex $staticDir }}
+            {{ range $staticFiles }} {{ warnf "File: %v" .Name }} {{ end }}
+          {{ end }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  {{ else }}
+    {{ if $debug }}
+      {{ warnf "%s Static directory %s does not contain any files" $dbg $staticDir }}
+    {{ end }}
+  {{ end }}
+{{ else }}
+  {{ if $debug }}
+    {{ warnf "%s Static directory %s does not exist" $dbg $staticDir }}
+  {{ end }}
+{{ end }}
+
+{{ with $staticIconFile }}
+  {{ $staticIconFilePath := path.Join $staticDir $staticIconFile.Name }}
+  {{ $staticIconFileContent := readFile $staticIconFilePath }}
+  {{ if $debug }}
+    {{ warnf "%s Using static icon file %s with .Size=%d" $dbg .Name .Size }}
+  {{ end }}
+  {{ $staticIconResourcePath := path.Join $staticSubPath .Name }}
+  {{ with resources.FromString $staticIconResourcePath $staticIconFileContent }}
+    {{ $iconResource = . | fingerprint }}
+    {{ if $debug }}
+      {{ warnf "%s Using static icon file %s with .RelPermalink=%s .Integrity=%s" $dbg
+          $iconResource.Name $iconResource.RelPermalink $iconResource.Data.Integrity }}
+    {{ end }}
+  {{ else }}
+    {{ errorf "%s Failed to create resource from static icon file %s" $dbg .Name }}
+  {{ end }}
+{{ end }}
+{{ if not $iconResource }}
+  {{ if $debug }}
+    {{ warnf "%s No static icon file found in %s" $dbg $staticDir }}
+  {{ end }}
+  {{/* If no static file was found, look for the largest icon in the assets directory */}}
+  {{ $assetsIconFile := false }}
+  {{ range $format := $imageFormats }}
+    {{ if not $assetsIconFile }}
+      {{ $formatGlob := printf "%s.%s" $iconBaseNameGlob . }}
+      {{ $assetsIconCandidateFiles := resources.Match (path.Join $assetsSubPath $iconBaseNameGlob) }}
+      {{ $assetsIconSize := 0 }}
+      {{ range $assetsIconCandidateFiles }}
+        {{ if $debug }}
+          {{ warnf "%s Found asset icon file %s with (len .Content)=%d" $dbg .Name (len .Content) }}
+        {{ end }}
+        {{ if gt (len .Content) $assetsIconSize }}
+          {{ $assetsIconSize = (len .Content) }}
+          {{ $assetsIconFile = . }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+  {{ with $assetsIconFile }}
+    {{ $iconResource = . | fingerprint }}
+    {{ if $debug }}
+      {{ warnf "%s Using resource icon .RelPermalink=%s .Integrity=%s" $dbg
+          $iconResource.RelPermalink $iconResource.Data.Integrity }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+{{ return $iconResource}}
