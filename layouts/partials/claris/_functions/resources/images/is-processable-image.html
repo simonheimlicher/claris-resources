@@ -1,0 +1,16 @@
+{{ $img := false }}
+{{ $supportedRasterImageFormats := (slice "gif" "jpeg" "png" "tiff" "webp") }}
+{{ with $resource := . }}
+  {{ if strings.Contains (printf "%T" . ) "resources.resourceAdapter" }}
+    {{ if eq $resource.ResourceType "image" }}
+      {{ if in $supportedRasterImageFormats $resource.MediaType.SubType }}
+        {{ with partial "claris/_functions/resources/images/get-dimensions" $resource }}
+          {{ if and (gt .width 0) (gt .height 0) }}
+            {{ $img = $resource }}
+          {{ end }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+{{ return $img }}

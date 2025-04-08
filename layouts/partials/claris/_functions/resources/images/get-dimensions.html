@@ -2,7 +2,7 @@
 {{ $debug := and false (page.Param "clarisdebug") }}
 {{ $dbg := printf "%s [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
-{{ $supportedRasterImageFormats := (slice "tiff" "jpeg" "jpg" "png" "gif" "webp") }}
+{{ $supportedRasterImageFormats := (slice "gif" "jpeg" "png" "tiff" "webp") }}
 {{ $dim := dict }}
 {{ $arg := . }}
 {{ $width := false }}

@@ -1,7 +1,7 @@
 {{ $template := "claris/_functions/resources/images/process-image" }}
 {{ $processedImg := false }}
 {{ $page := default page .Page }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $debug := and false (or (cond .resource (findRE "logo" .resource.Name) false) ) }}
 {{ $dbg := printf "%s %q [%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .resource (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
 
@@ -22,15 +22,18 @@
 {{ end }}
 
 {{ with $processImageArgs.resource }}
-  {{ with $img = partialCached "claris/_functions/resources/images/is-image" . . }}
+  {{ with $img = partialCached "claris/_functions/resources/images/is-processable-image" . .Name .RelPermalink }}
   {{ else }}
     {{ errorf `%s invalid .resource=%v [%T]` $dbg . . }}
+    {{ with partialCached "claris/_functions/resources/images/is-image" . .Name .RelPermalink }}
+      {{ errorf "%s format=%v of source image %v is not supported" $dbg .MediaType.SubType . }}
+    {{ end }}
   {{ end }}
 {{ end }}
 
 {{/* To parse the arguments defining the target dimensions, we use the existing
     `.original` and `.target` if they exist, otherwise we parse the arguments with `parse-image-dimensions` */}}
-{{ with $processImageArgs }}
+{{ with and $img $processImageArgs }}
   {{ if not (and .original .target) }}
     {{ if $debug }}
       {{ warnf "%s parsing dimensions with args:\n%v" $dbg
@@ -43,14 +46,14 @@
   {{ end }}
 {{ end }}
 
-{{ with $processImageArgs.format }}
+{{ with and $img $processImageArgs.format }}
   {{ if in $supportedFormats . }}
     {{ if $debug }}
-      {{ warnf "%s .format=%v [%T]" $dbg . . }}
+      {{ warnf "%s valid target format: .format=%q" $dbg . }}
     {{ end }}
   {{ else }}
     {{ $img = false }}
-    {{ errorf "%s invalid .format: %q" $dbg . }}
+    {{ errorf "%s target format is not supported .format=%q is not in %v" $dbg . $supportedFormats }}
   {{ end }}
 {{ end }}
 
@@ -282,7 +285,7 @@
   {{ end }}
 {{ end }}
 
-{{ with partialCached "partials/claris/_functions/resources/images/is-image" $processedImg $processedImg }}
+{{ with and $processedImg (partialCached "partials/claris/_functions/resources/images/is-image" $processedImg $processedImg) }}
   {{ if $debug }}
     {{ warnf "%s returning %v[%dx%d ratio=%.4g] from %v[%dx%d ratio=%.4g] from args:\n%v\nprocessImageArgs: %v" $dbg
         $processedImg.MediaType
@@ -293,7 +296,7 @@
         (jsonify (dict "indent" "  ") $processImageArgs) }}
   {{ end }}
 {{ else }}
-  {{ errorf "%s invalid result: %T: %v" $dbg $processedImg $processedImg }}
+  {{ errorf "%s image processing failed. Returning %v[%T]" $dbg $processedImg $processedImg }}
 {{ end }}
 {{ return $processedImg }}
 

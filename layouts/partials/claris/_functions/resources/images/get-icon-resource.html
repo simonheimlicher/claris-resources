@@ -33,22 +33,22 @@ https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-mo
   {{ $iconBaseNameGlob = . }}
   {{ $iconBaseNameRegex = replaceRE `[?]+` `.` $iconBaseNameGlob | replaceRE `[*]+` `.*` }}
   {{ if $debug }}
-    {{ warnf "%s .match='%s' iconGlob='%s' iconBaseNameRegex='%s'" $dbg . $iconBaseNameGlob $iconBaseNameRegex }}
+    {{ warnf "%s Processed parameter .match='%s': iconGlob='%s' iconBaseNameRegex='%s'" $dbg . $iconBaseNameGlob $iconBaseNameRegex }}
   {{ end }}
 {{ end }}
 
-{{ $imageFormats := (slice "svg" "png") }}
+{{ $imageFormats := default (slice "svg" "png") .formats }}
 
 {{/* If the static icon sub path exists, look for the largest icon matching the glob */}}
 {{ $staticIconFile := false }}
 {{ if fileExists $staticDir }}
-  {{ if $debug }}
-    {{ warnf "%s Looking for icon files in %s" $dbg $staticDir }}
-  {{ end }}
   {{ with $staticFiles := readDir $staticDir }}
     {{ range $format := $imageFormats }}
       {{ if not $staticIconFile }}
         {{ $formatRegex := printf `(?i)^%s\.%s$` $iconBaseNameRegex . }}
+        {{ if $debug }}
+          {{ warnf "%s Looking for icon files in staticDir=%q matching formatRegex=%q" $dbg $staticDir $formatRegex }}
+        {{ end }}
         {{ with $formatCandidateFiles := where $staticFiles "Name" "like" $formatRegex }}
           {{ if $debug }}
             {{ warnf "%s formatCandidateFiles:\n%#v" $dbg $formatCandidateFiles }}
@@ -107,7 +107,12 @@ https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-mo
   {{ $assetsIconFile := false }}
   {{ range $format := $imageFormats }}
     {{ if not $assetsIconFile }}
-      {{ $formatGlob := printf "%s.%s" $iconBaseNameGlob . }}
+      {{ $formatGlob := printf "%s.%s" $iconBaseNameGlob $format }}
+      {{ $iconBaseNameGlob := printf "%s.%s" $iconBaseNameGlob $format }}
+      {{ $resourceGlob := path.Join $assetsSubPath $iconBaseNameGlob }}
+      {{ if $debug }}
+        {{ warnf "%s Looking for icon files in assets with glob=%q [assetsSubPath=%q formatGlob=%q]" $dbg $resourceGlob $assetsSubPath $formatGlob }}
+      {{ end }}
       {{ $assetsIconCandidateFiles := resources.Match (path.Join $assetsSubPath $iconBaseNameGlob) }}
       {{ $assetsIconSize := 0 }}
       {{ range $assetsIconCandidateFiles }}
