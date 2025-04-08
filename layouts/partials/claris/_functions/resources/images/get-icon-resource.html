@@ -92,8 +92,8 @@ https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-mo
   {{ with resources.FromString $staticIconResourcePath $staticIconFileContent }}
     {{ $iconResource = . | fingerprint }}
     {{ if $debug }}
-      {{ warnf "%s Using static icon file %s with .RelPermalink=%s .Integrity=%s" $dbg
-          $iconResource.Name $iconResource.RelPermalink $iconResource.Data.Integrity }}
+      {{ warnf "%s Using static icon file %s with .RelPermalink=%s"
+          $dbg .Name .RelPermalink }}
     {{ end }}
   {{ else }}
     {{ errorf "%s Failed to create resource from static icon file %s" $dbg .Name }}
@@ -117,7 +117,7 @@ https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-mo
       {{ $assetsIconSize := 0 }}
       {{ range $assetsIconCandidateFiles }}
         {{ if $debug }}
-          {{ warnf "%s Found asset icon file %s with (len .Content)=%d" $dbg .Name (len .Content) }}
+          {{ warnf "%s Found assets icon file %s with (len .Content)=%d" $dbg .Name (len .Content) }}
         {{ end }}
         {{ if gt (len .Content) $assetsIconSize }}
           {{ $assetsIconSize = (len .Content) }}
@@ -129,8 +129,8 @@ https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-mo
   {{ with $assetsIconFile }}
     {{ $iconResource = . | fingerprint }}
     {{ if $debug }}
-      {{ warnf "%s Using resource icon .RelPermalink=%s .Integrity=%s" $dbg
-          $iconResource.RelPermalink $iconResource.Data.Integrity }}
+      {{ warnf "%s Using assets icon file %s with .RelPermalink=%s"
+          $dbg .Name .RelPermalink }}
     {{ end }}
   {{ end }}
 {{ end }}
