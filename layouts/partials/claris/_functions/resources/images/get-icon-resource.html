@@ -14,7 +14,7 @@ https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-mo
 {{ with .pathprefix }}
   {{ $staticSubPath = . | strings.TrimLeft "/" | strings.TrimRight "/" | relURL }}
   {{ if $debug }}
-    {{ warnf `%s page.Param "meta.favicon.pathprefix"='%v' staticSubPath='%v'` $dbg (page.Param "meta.favicon.pathprefix") $staticSubPath }}
+    {{ warnf "%s staticSubPath=%q" $dbg $staticSubPath }}
   {{ end }}
 {{ end }}
 {{ $staticDir := path.Join "static" $staticSubPath }}
@@ -23,7 +23,7 @@ https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-mo
 {{ with .pathprefix }}
   {{ $assetsSubPath = . | strings.TrimLeft "/" | strings.TrimRight "/" | relURL }}
   {{ if $debug }}
-    {{ warnf `%s page.Param "meta.favicon.pathprefix"='%v' assetsSubPath='%v'` $dbg (page.Param "meta.favicon.pathprefix") $assetsSubPath }}
+    {{ warnf "%s assetsSubPath=%q" $dbg $assetsSubPath }}
   {{ end }}
 {{ end }}
 
