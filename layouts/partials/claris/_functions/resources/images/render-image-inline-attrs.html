@@ -21,8 +21,7 @@
 
 {{ $defaultVariantName := "default" }}
 {{ $sourceAttributeNames := slice "style" }}
-{{ $sourceAttributeNamesImg := slice "alt" "fetchpriority" "loading" "title" "class" "data-zoomable" }}
-{{ $sourceAttributeNamesSource := slice "media" }}
+{{ $sourceAttributeNamesImg := slice "title" "class" }}
 
 {{ $partialArgs := merge $ (dict "Page" $page "Debug" $debug) }}
 {{ $parsedArgs := dict }}
@@ -78,9 +77,6 @@
     {{ end }}
 
     {{ $styleAttr := false }}
-    {{ with $parsedArgs.image.position }}
-      {{ $styleAttr = printf "object-fit: cover; object-position: %s" . }}
-    {{ end }}
 
     {{ $elementContent := dict }}
     {{ $elementAttr := dict }}
