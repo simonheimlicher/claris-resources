@@ -21,8 +21,7 @@
 
 {{ $defaultVariantName := "default" }}
 {{ $sourceAttributeNames := slice "style" }}
-{{ $sourceAttributeNamesImg := slice "alt" "fetchpriority" "loading" "title" "class" "data-zoomable" }}
-{{ $sourceAttributeNamesSource := slice "media" }}
+{{ $sourceAttributeNamesImg := slice "alt" "title" "class" }}
 
 {{ $partialArgs := merge $ (dict "Page" $page "Debug" $debug) }}
 {{ $parsedArgs := dict }}
