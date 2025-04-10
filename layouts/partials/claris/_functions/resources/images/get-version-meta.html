@@ -31,16 +31,16 @@
     {{/* NOTE: Adding `src`, `with` and `height` attributes makes debugging much easier
     and it also appears to address spurious issues with `partialCached` mixing up images */}}
     {{ $versionMeta = merge $versionMeta (dict
-        "index" $versionIndex
         "name" $versionName
         "resource" $img
         "src" $img.RelPermalink
-        "width" $dim.Width
-        "height" $dim.Height
+        "width" $dim.width
+        "height" $dim.height
         "aspect" $aspectRatio.human
         "ratio" $aspectRatio.float
         "format" $img.MediaType.SubType
     ) }}
+    {{ with $versionIndex }}{{ $versionMeta = merge $versionMeta (dict "index" $versionIndex) }}{{ end }}
     {{ $versions = dict $versionName $versionMeta }}
     {{ if $debug }}
       {{ warnf "%s returning versionMeta with versionID=%s and resource=%v [%v]:\n%v\nInitial args:\n%v" $dbg
