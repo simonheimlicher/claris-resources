@@ -1,7 +1,13 @@
 {{ $template := "claris/_functions/resources/images/render-image-attrs" }}
 {{ $page := default page .Page }}
-{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-{{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $debug := (and false
+    .Debug
+    (and (or .src .resource) (gt (len (findRE `logo` (or .src .resource) ) ) 0) )
+    ($page.Param "clarisdebug")
+) }}
+{{ $dbg := printf "%s[%s]%v" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink)
+    (replaceRE `.*?([^/]+)$` `$1` $template)
+    (or (and .src (printf " <src=%v>" .src)) (and .resource (printf " <resource=%v [%s]>" .resource .resource.MediaType.Type)) "") }}
 
 {{ $containerElement := dict }}
 {{ $containerElementName := false }}
@@ -18,20 +24,21 @@
 {{ $sourceAttributeNamesImg := slice "alt" "fetchpriority" "loading" "title" "class" "data-zoomable" }}
 {{ $sourceAttributeNamesSource := slice "media" }}
 
+{{ $partialArgs := merge $ (dict "Page" $page "Debug" $debug) }}
 {{ $parsedArgs := dict }}
 {{ if (or $.resource $.src $.version) }}
   {{ $parsedArgs = partialCached "claris/_functions/resources/images/parse-args"
-      (merge $ (dict "Page" $page) ) (merge $ (dict "Page" nil) ) }}
+      $partialArgs (merge $partialArgs (dict "Page" nil) ) }}
 
-  {{ if and false $debug }}
+  {{ if and true $debug }}
     {{ warnf "%s called parse-args with:\n%v\nNow generating attributes for render-image with parsedArgs:\n%v" $dbg
-        (jsonify (dict "indent" "  ") (merge $ (dict "Page" "omitted"
+        (jsonify (dict "indent" "  ") (merge $partialArgs (dict "Page" "omitted"
           "resource" (cond (not .resource) .resource (printf "%v [%v]" .resource .resource.MediaType) )) ) )
         (jsonify (dict "indent" "  ") $parsedArgs) }}
   {{ end }}
 {{ else }}
   {{ errorf "%s Missing argument .resource or .src or .version in initial args:\n%v" $dbg
-      (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) }}
+      (jsonify (dict "indent" "  ") (merge $partialArgs (dict "Page" nil) ) ) }}
 {{ end }}
 
 {{ $supportedRasterImageFormats := (slice "tiff" "jpeg" "jpg" "png" "gif" "webp") }}
@@ -94,7 +101,9 @@
           {{ $versionWithFormats := merge $versionMeta (dict "formats" $srcSet ) }}
           {{ $versionsWithFormats = append $versionWithFormats $versionsWithFormats }}
           {{ if and true $debug }}
-            {{ warnf "%s created srcSet:\n%v" $dbg (jsonify (dict "indent" "  ") $srcSet ) }}
+            {{ warnf "%s added srcSet:\n%v\nversionsWithFormats:\n%v" $dbg
+                (jsonify (dict "indent" "  ") $srcSet)
+                (jsonify (dict "indent" "  ") $versionsWithFormats) }}
           {{ end }}
         {{ else }}
           {{ errorf "%s image resource=%#v is in an unsuspported image format: %v is not in %v" $dbg
@@ -137,8 +146,8 @@
         {{ end }}
 
         {{ $variantChildren := slice }}
-        {{ range $versionIdx, $versionFormatSrcSets := $versionsWithFormats }}
-          {{ range $formatIdx, $formatSrcSet := $versionFormatSrcSets.formats }}
+        {{ range $versionIdx, $versionWithFormats := $versionsWithFormats }}
+          {{ range $formatIdx, $formatSrcSet := $versionWithFormats.formats }}
             {{ if and false $debug }}
               {{ warnf "%s adding attributes for rendering to formatSrcSet:\n%v" $dbg
                 (jsonify (dict "indent" "  ") (merge .
@@ -147,7 +156,7 @@
 
             {{/* The `img` element must always be the last element within `picture`
               We render the last format of the first version as img */}}
-            {{ $lastFormatIdx := sub (len $versionFormatSrcSets.formats) 1 }}
+            {{ $lastFormatIdx := sub (len $versionWithFormats.formats) 1 }}
             {{ if and (eq $versionIdx $lastVersionIdx) (eq $formatIdx $lastFormatIdx) }}
               {{ $elementName = "img" }}
             {{ end }}
@@ -194,6 +203,19 @@
                 {{ with .Height }}
                   {{ $formatSourceAttr = merge $formatSourceAttr (dict "height" . ) }}
                 {{ end }}
+              {{ else }}
+                {{ with $versionWithFormats.width }}
+                  {{ $formatSourceAttr = merge $formatSourceAttr (dict "width" . ) }}
+                {{ else }}
+                  {{ errorf "%s missing .width in formatSrcSet:\n%v" $dbg
+                      (jsonify (dict "indent" "  ") $versionWithFormats) }}
+                {{ end }}
+                {{ with $versionWithFormats.height }}
+                  {{ $formatSourceAttr = merge $formatSourceAttr (dict "height" . ) }}
+                {{ else }}
+                  {{ errorf "%s missing .width in formatSrcSet:\n%v" $dbg
+                      (jsonify (dict "indent" "  ") $versionWithFormats) }}
+                {{ end }}
               {{ end }}
             {{ end }}
 
@@ -220,7 +242,7 @@
                 {{ $formatSourceAttr = merge $formatSourceAttr (dict $k $v) }}
               {{ end }}
             {{ end }}
-            {{ range $k, $v := $versionFormatSrcSets }}
+            {{ range $k, $v := $versionWithFormats }}
               {{ if and (in $attributeNames $k) $v }}
                 {{ $formatSourceAttr = merge $formatSourceAttr (dict $k $v) }}
               {{ end }}

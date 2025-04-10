@@ -1,11 +1,17 @@
 {{- $template := "claris/_components/render-image" }}
 {{- $page := default page .Page }}
-{{- $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-{{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{- $debug := (and false
+    .Debug
+    (and (or .src .resource) (gt (len (findRE `logo` (or .src .resource) ) ) 0) )
+    ($page.Param "clarisdebug")
+) -}}
+{{- $dbg := printf "%s[%s]%v" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink)
+    (replaceRE `.*?([^/]+)$` `$1` $template)
+    (or (and .src (printf " <src=%v>" .src)) (and .resource (printf " <resource=%v [%s]>" .resource .resource.MediaType.Type)) "") }}
 
 {{- if (or $.resource $.src $.version) }}
   {{- if $debug }}
-    {{ warnf "%s resource=%v src=%v version=%v" $dbg $.resource $.src $.version }}
+    {{- warnf "%s resource=%v src=%v version=%v" $dbg $.resource $.src $.version }}
   {{- end }}
   {{- with $imageAttributes := partialCached "claris/_functions/resources/images/render-image-attrs" $ (merge . (dict "Page" nil) ) }}
     {{- partialCached "claris/_components/render-element" (merge . (dict "Page" $page) ) (merge . (dict "Page" nil) ) }}
@@ -14,6 +20,6 @@
         (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) }}
   {{- end}}
 {{- else }}
-  {{ errorf "%s Missing argument .resource or .src or .version in initial args:\n%v" $dbg
-      (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) }}
+  {{- errorf "%s Missing argument .resource or .src or .version in initial args:\n%v" $dbg
+      (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) -}}
 {{- end -}}
