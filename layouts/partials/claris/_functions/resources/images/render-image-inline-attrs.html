@@ -1,0 +1,199 @@
+{{ $template := "claris/_functions/resources/images/render-image-inline-attrs" }}
+{{ $page := default page .Page }}
+{{ $debug := (and false
+    .Debug
+    (and (or .src .resource) (gt (len (findRE `logo` (or .src .resource) ) ) 0) )
+    ($page.Param "clarisdebug")
+) }}
+{{ $dbg := printf "%s[%s]%v" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink)
+    (replaceRE `.*?([^/]+)$` `$1` $template)
+    (or (and .src (printf " <src=%v>" .src)) (and .resource (printf " <resource=%v [%s]>" .resource .resource.MediaType.Type)) "") }}
+
+{{ $containerElement := dict }}
+{{ $containerElementName := false }}
+{{ $containerAttr := dict }}
+{{ $containerClass := slice }}
+{{ $containerChildren := slice }}
+
+{{ $imageElement := dict }}
+{{ $backgroundElements := slice }}
+{{ $captionElement := dict }}
+
+{{ $defaultVariantName := "default" }}
+{{ $sourceAttributeNames := slice "style" }}
+{{ $sourceAttributeNamesImg := slice "alt" "fetchpriority" "loading" "title" "class" "data-zoomable" }}
+{{ $sourceAttributeNamesSource := slice "media" }}
+
+{{ $partialArgs := merge $ (dict "Page" $page "Debug" $debug) }}
+{{ $parsedArgs := dict }}
+{{ if (or $.resource $.src $.version) }}
+  {{ $parsedArgs = partialCached "claris/_functions/resources/images/parse-args"
+      $partialArgs (merge $partialArgs (dict "Page" nil) ) }}
+
+  {{ if and true $debug }}
+    {{ warnf "%s called parse-args with:\n%v\nNow generating attributes for render-image with parsedArgs:\n%v" $dbg
+        (jsonify (dict "indent" "  ") (merge $partialArgs (dict "Page" "omitted"
+          "resource" (cond (not .resource) .resource (printf "%v [%v]" .resource .resource.MediaType) )) ) )
+        (jsonify (dict "indent" "  ") $parsedArgs) }}
+  {{ end }}
+{{ else }}
+  {{ errorf "%s Missing argument .resource or .src or .version in initial args:\n%v" $dbg
+      (jsonify (dict "indent" "  ") (merge $partialArgs (dict "Page" nil) ) ) }}
+{{ end }}
+
+{{ $supportedInlineImageFormats := (slice "svg") }}
+
+{{ with $parsedArgs }}
+  {{ $elementName := false }}
+  {{ $versionWithFormats := false }}
+  {{ range $versionID, $versionMeta := $parsedArgs.image.version }}
+    {{ with $resource := $versionMeta.resource }}
+      {{ if in $supportedInlineImageFormats $resource.MediaType.SubType }}
+        {{ $elementName = $resource.MediaType.SubType }}
+        {{ $srcSet := slice (dict
+          "format" "original"
+          "resource" $resource
+          "srcset" (slice $resource.RelPermalink)
+        ) }}
+        {{ $versionWithFormats = merge $versionMeta (dict "formats" $srcSet ) }}
+        {{ if and true $debug }}
+          {{ warnf "%s added srcSet:\n%v\nversionsWithFormats:\n%v" $dbg
+              (jsonify (dict "indent" "  ") $srcSet)
+              (jsonify (dict "indent" "  ") $versionWithFormats) }}
+        {{ end }}
+      {{ else }}
+        {{ errorf "%s image resource=%#v is in an image format that does not support inlining: %v is not in %v" $dbg
+            $resource $resource.MediaType.SubType $supportedInlineImageFormats }}
+        {{ return }}
+      {{ end }}
+    {{ else }}
+      {{ errorf "%s missing image resource=%#v\nparsedArgs:\n%v" $dbg
+          $versionMeta.resource (jsonify (dict "indent" "  ") $parsedArgs) }}
+    {{ end }}
+  {{ end }}
+
+  {{ with $versionWithFormats }}
+    {{ if and true $debug }}
+      {{ warnf "%s generated versionWithFormats:\n%v" $dbg (jsonify (dict "indent" "  ") $versionWithFormats) }}
+    {{ end }}
+
+    {{ $styleAttr := false }}
+    {{ with $parsedArgs.image.position }}
+      {{ $styleAttr = printf "object-fit: cover; object-position: %s" . }}
+    {{ end }}
+
+    {{ $elementContent := dict }}
+    {{ $elementAttr := dict }}
+
+    {{ with .resource }}
+      {{ with .Content }}
+        {{ $elementContent = . }}
+      {{ else }}
+        {{ errorf "%s missing .Content in .resource:\n%v" $dbg
+            (jsonify (dict "indent" "  ") $versionWithFormats) }}
+      {{ end }}
+    {{ end }}
+
+    {{ with .width }}
+      {{ $elementAttr = merge $elementAttr (dict "width" . ) }}
+    {{ else }}
+      {{ errorf "%s missing .width in formatSrcSet:\n%v" $dbg
+          (jsonify (dict "indent" "  ") $versionWithFormats) }}
+    {{ end }}
+    {{ with .height }}
+      {{ $elementAttr = merge $elementAttr (dict "height" . ) }}
+    {{ else }}
+      {{ errorf "%s missing .width in formatSrcSet:\n%v" $dbg
+          (jsonify (dict "indent" "  ") $versionWithFormats) }}
+    {{ end }}
+
+    {{ $attributeNames := $sourceAttributeNames }}
+    {{ $attributeNames = append $sourceAttributeNamesImg $attributeNames }}
+    {{ range $k, $v := $parsedArgs.image }}
+      {{ if and (in $attributeNames $k) $v }}
+        {{ $elementAttr = merge $elementAttr (dict $k $v) }}
+      {{ end }}
+    {{ end }}
+    {{ range $k, $v := $versionWithFormats }}
+      {{ if and (in $attributeNames $k) $v }}
+        {{ $elementAttr = merge $elementAttr (dict $k $v) }}
+      {{ end }}
+    {{ end }}
+
+    {{ $imageElement = (dict
+      "name" $elementName
+      "attr" $elementAttr
+      "content" $elementContent
+    ) }}
+    {{ if and true $debug }}
+      {{ warnf "%s imageElement:\n%v" $dbg
+          (jsonify (dict "indent" "  ") $imageElement ) }}
+    {{ end }}
+  {{ else }}
+    {{ errorf "%s unable to get versionWithFormats" $dbg }}
+  {{ end }}
+
+{{ end }}
+
+{{ with $containerArgs := $parsedArgs.container }}
+  {{/* Determine the HTML element to use as `containerElement` and `imageElement`:
+    - containerElement: the outermost element to render the image
+      with all its variants and formatSrcSet. Could be `figure`, `picture` or `img`
+    - imageElement: the element that contains the sourceElements.
+      Either `picture` or `img` */}}
+  {{ with $containerArgs.containerclass }}
+    {{ $containerClass = append . $containerClass | uniq }}
+  {{ end }}
+  {{ with $containerArgs.figureclass }}
+    {{/* As there is a `figureclass`, we use a `figure` element as the container */}}
+    {{ $containerElementName = "figure" }}
+    {{ $containerClass = append . $containerClass | uniq }}
+  {{ end }}
+  {{ with $containerArgs.caption }}
+    {{/* As there is a `caption` attribute, we use a `figure` element as the container */}}
+    {{ $containerElementName = "figure" }}
+    {{ $captionElement = (dict
+      "name" "figcaption"
+      "content" ($page.RenderString . )
+      "attr" (dict "class" (slice "caption font-meta"))
+    ) }}
+  {{ end }}
+{{ end }}
+
+{{ with $containerClass }}
+  {{ $containerAttr = (merge $containerAttr (dict "class" . ) ) }}
+{{ end }}
+
+{{ if $containerElementName }}
+  {{ with $backgroundElements }}
+    {{ $containerChildren = append (index $backgroundElements 0) $containerChildren }}
+    {{ $containerChildren = append $imageElement $containerChildren }}
+    {{ $containerChildren = append (index $backgroundElements 1) $containerChildren }}
+  {{ else }}
+    {{ $containerChildren = append $imageElement $containerChildren }}
+  {{ end }}
+  {{ with $captionElement }}
+    {{ $containerChildren = append $captionElement $containerChildren }}
+  {{ end }}
+  {{ $containerElement = (dict
+    "name" $containerElementName
+    "attr" $containerAttr
+    "children" $containerChildren
+  ) }}
+  {{ if and false $debug }}
+    {{ warnf "%s containerElement=%v: attr:\n%v\nchildren:\n%v" $dbg
+        $containerElementName
+        (jsonify (dict "indent" "  ") $containerAttr)
+        (jsonify (dict "indent" "  ") $containerChildren) }}
+  {{ end }}
+{{ else }}
+  {{ $containerElement = merge $imageElement (dict
+    "attr" (merge $imageElement.attr $containerAttr)
+  ) }}
+{{ end }}
+
+{{ if and false $debug }}
+  {{ warnf "%s returning containerElement:\n%v" $dbg (jsonify (dict "indent" "  ") $containerElement ) }}
+{{ end }}
+
+{{ return $containerElement }}

@@ -9,17 +9,32 @@
     (replaceRE `.*?([^/]+)$` `$1` $template)
     (or (and .src (printf " <src=%v>" .src)) (and .resource (printf " <resource=%v [%s]>" .resource .resource.MediaType.Type)) "") }}
 
+{{- $partialArgs := merge $ (dict "Debug" $debug) }}
+{{- $partialKey := merge $ (dict "Debug" nil "Page" nil) }}
+
 {{- if (or $.resource $.src $.version) }}
-  {{- if $debug }}
+  {{- if and false $debug }}
     {{- warnf "%s resource=%v src=%v version=%v" $dbg $.resource $.src $.version }}
   {{- end }}
-  {{- with $imageAttributes := partialCached "claris/_functions/resources/images/render-image-attrs" $ (merge . (dict "Page" nil) ) }}
-    {{- partialCached "claris/_components/render-element" (merge . (dict "Page" $page) ) (merge . (dict "Page" nil) ) }}
+  {{- if .inline }}
+    {{- if $debug }}
+      {{- warnf "%s inline=%v" $dbg .inline }}
+    {{- end }}
+    {{- with $imageAttributes := partialCached "claris/_functions/resources/images/render-image-inline-attrs" $partialArgs $partialKey }}
+      {{- partialCached "claris/_components/render-element" . . }}
+    {{- else }}
+      {{- errorf "%s render-image-attributes returned %v [type=%T]. Initial args:\n%v" $dbg . .
+          (jsonify (dict "indent" "  ") (merge $partialArgs (dict "Page" nil) ) ) }}
+    {{- end}}
   {{- else }}
-    {{- errorf "%s render-image-attributes returned %v [type=%T]. Initial args:\n%v" $dbg . .
-        (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) }}
+    {{- with $imageAttributes := partialCached "claris/_functions/resources/images/render-image-attrs" $partialArgs $partialKey }}
+      {{- partialCached "claris/_components/render-element" . . }}
+    {{- else }}
+      {{- errorf "%s render-image-attributes returned %v [type=%T]. Initial args:\n%v" $dbg . .
+          (jsonify (dict "indent" "  ") (merge $partialArgs (dict "Page" nil) ) ) }}
+    {{- end}}
   {{- end}}
 {{- else }}
   {{- errorf "%s Missing argument .resource or .src or .version in initial args:\n%v" $dbg
-      (jsonify (dict "indent" "  ") (merge $ (dict "Page" nil) ) ) -}}
+      (jsonify (dict "indent" "  ") (merge $partialArgs (dict "Page" nil) ) ) -}}
 {{- end -}}
