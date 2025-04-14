@@ -1,174 +1,183 @@
-{{- $preloadFonts := slice }}
-{{- $page := .Page }}
-{{- $template := "claris/_functions/resources/fonts/preload" }}
-{{- $debug := and false (or .Debug (in (slice "home" "section") $page.Kind) ) }}
-{{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $preloadFonts := slice }}
+{{ $page := .Page }}
+{{ $template := "claris/_functions/resources/fonts/preload" }}
+{{ $debug := and false (or .Debug (in (slice "home" "section") $page.Kind) ) }}
+{{ $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
 
-{{- $styleSheet := .StyleSheet }}
+{{ $styleSheet := .StyleSheet }}
 
-{{- $preloadFontFamilies := slice }}
-{{- with $fontTypeDefault := $page.Param "assets.styles.fonts.type.default" }}
-  {{- with $fontFamilyDefault := index ($page.Param "assets.styles.fonts.family") $fontTypeDefault }}
-    {{- $preloadFontFamilies = append (lower .) $preloadFontFamilies }}
-  {{- end }}
-{{- end }}
-{{- with $page.Scratch.Get "claris.assets.font.main" }}
-  {{- $pageMainFontFamily := (lower .) }}
-  {{- if (in $preloadFontFamilies $pageMainFontFamily) }}
-    {{- if $debug }}
-      {{- warnf "%s .Kind=%v: not adding font family from claris.assets.font.main=%v to preloadFontFamilies=%v"
+{{ $preloadFontFamilies := slice }}
+{{ with $fontTypeDefault := $page.Param "assets.styles.fonts.type.default" }}
+  {{ with $fontFamilyDefault := index ($page.Param "assets.styles.fonts.family") $fontTypeDefault }}
+    {{ $preloadFontFamilies = append (lower .) $preloadFontFamilies }}
+  {{ end }}
+{{ end }}
+{{ with $page.Scratch.Get "claris.assets.font.main" }}
+  {{ $pageMainFontFamily := (lower .) }}
+  {{ if (in $preloadFontFamilies $pageMainFontFamily) }}
+    {{ if $debug }}
+      {{ warnf "%s .Kind=%v: not adding font family from claris.assets.font.main=%v to preloadFontFamilies=%v"
           $dbg $page.Kind $pageMainFontFamily $preloadFontFamilies }}
-    {{- end }}
-  {{- else }}
-    {{- $preloadFontFamilies = append $preloadFontFamilies (slice $pageMainFontFamily) }}
-    {{- if $debug }}
-      {{- warnf "%s .Kind=%v: added font family from claris.assets.font.main=%v to preloadFontFamilies=%v"
+    {{ end }}
+  {{ else }}
+    {{ $preloadFontFamilies = append $preloadFontFamilies (slice $pageMainFontFamily) }}
+    {{ if $debug }}
+      {{ warnf "%s .Kind=%v: added font family from claris.assets.font.main=%v to preloadFontFamilies=%v"
           $dbg $page.Kind $pageMainFontFamily $preloadFontFamilies }}
-    {{- end }}
-  {{- end }}
-{{- end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
 
-{{- $preloadFontFamilies = apply $preloadFontFamilies "lower" "." }}
+{{ $preloadFontFamilies = apply $preloadFontFamilies "lower" "." }}
 
-{{- $preloadFontFamiliesMap := dict }}
+{{ $preloadFontFamiliesMap := dict }}
 
-{{- if $debug }}
-  {{- warnf "%s .Kind=%v: preloadFontFamilies=%v" $dbg $page.Kind $preloadFontFamilies }}
-{{- end }}
+{{ if $debug }}
+  {{ warnf "%s .Kind=%v: preloadFontFamilies=%v" $dbg $page.Kind $preloadFontFamilies }}
+{{ end }}
 
-{{- $preloadFontStyles := default (slice "normal") ($page.Param "assets.styles.fonts.preload.styles") }}
-{{- $preloadFontStyles = apply $preloadFontStyles "lower" "." }}
+{{ $preloadFontStyles := default (slice "normal") ($page.Param "assets.styles.fonts.preload.styles") }}
+{{ $preloadFontStyles = apply $preloadFontStyles "lower" "." }}
 
-{{- $preloadFontWeights := default (slice "400") ($page.Param "assets.styles.fonts.preload.weights") }}
-{{- $preloadFontWeights = apply $preloadFontWeights "lower" "." }}
+{{ $preloadFontWeights := default (slice "400") ($page.Param "assets.styles.fonts.preload.weights") }}
+{{ $preloadFontWeights = apply $preloadFontWeights "lower" "." }}
 
-{{- $preloadFontFormats := default (slice "woff2") ($page.Param "assets.styles.fonts.preload.weights") }}
-{{- $preloadFontFormats = apply $preloadFontFormats "lower" "." }}
+{{ $preloadFontFormats := default (slice "woff2") ($page.Param "assets.styles.fonts.preload.weights") }}
+{{ $preloadFontFormats = apply $preloadFontFormats "lower" "." }}
 
 
-{{- $fontMatchRE := `@font-face[^{]*\{[^}]*[^}]+?src:[^;]*url\(['"][^'"]+\.[a-z0-9]+['"][^}]+\}` }}
-{{- $fontFamilyRE := `@font-face[^{]*\{[^}]*[^}]+?font-family:\s*['"]([^'"]+)['"]` }}
-{{- $fontStyleRE := `@font-face[^{]*\{[^}]*[^}]+?font-style:\s*([^;:\s]+)[^}]+?src:[^;]*url\(['"][^'"]+\.[a-z0-9]+['"]` }}
-{{- $fontWeightRE := `@font-face[^{]*\{[^}]*[^}]+?font-weight:\s*([^;:\s]+)[^}]+?src:[^;]*url\(['"][^'"]+\.[a-z0-9]+['"]` }}
+{{ $fontMatchRE := `@font-face[^{]*\{[^}]*[^}]+?src:[^;]*url\(['"][^'"]+\.[a-z0-9]+['"][^}]+\}` }}
+{{ $fontFamilyRE := `@font-face[^{]*\{[^}]*[^}]+?font-family:\s*['"]([^'"]+)['"]` }}
+{{ $fontStyleRE := `@font-face[^{]*\{[^}]*[^}]+?font-style:\s*([^;:\s]+)[^}]+?src:[^;]*url\(['"][^'"]+\.[a-z0-9]+['"]` }}
+{{ $fontWeightRE := `@font-face[^{]*\{[^}]*[^}]+?font-weight:\s*([^;:\s]+)[^}]+?src:[^;]*url\(['"][^'"]+\.[a-z0-9]+['"]` }}
 
-{{- $availableFontFilesRE := `(url\(['"]([^'"]+\.[a-z0-9]+)['"]\)\s*format\([^)]+\))` }}
-{{- $fontFormatRE := `url\(['"][^'"]+\.[a-z0-9]+['"]\)\s*format\(\s*['"]([^'"]+)['"]\)` }}
-{{- $fontFileURLRE := `url\(\s*['"]([^'"]+\.[a-z0-9]+)['"]\s*\)` }}
+{{ $availableFontFilesRE := `(url\(['"]([^'"]+\.[a-z0-9]+)['"]\)\s*format\([^)]+\))` }}
+{{ $fontFormatRE := `url\(['"][^'"]+\.[a-z0-9]+['"]\)\s*format\(\s*['"]([^'"]+)['"]\)` }}
+{{ $fontFileURLRE := `url\(\s*['"]([^'"]+\.[a-z0-9]+)['"]\s*\)` }}
 
-{{- $fontsSelfHosted := $page.Param "assets.styles.fonts.selfhosted" | default false }}
+{{ $fontsSelfHosted := $page.Param "assets.styles.fonts.selfhosted" | default false }}
 
-{{- with and $fontsSelfHosted $styleSheet }}
-  {{- $fontURLMatches := findRE $fontMatchRE (lower .unminified.Content) }}
-  {{- with $fontURLMatches }}
-    {{- $preloadFontURLs := slice }}
-    {{- range $fontURLMatches }}
-      {{- $fontFamily := findRESubmatch $fontFamilyRE (lower . ) }}
-      {{- with $fontFamily }}
-        {{- $fontFamily = index (last 1 (index . 0) ) 0 }}
-      {{- else }}
-        {{- warnf "%s No match for fontFamilyRE=%v in %v" $dbg $fontStyleRE . }}
-      {{- end }}
-      {{- if in $preloadFontFamilies $fontFamily }}
-        {{- $familyPreloadFonts := slice }}
-        {{- with index $preloadFontFamiliesMap $fontFamily }}
-          {{- $familyPreloadFonts = . }}
-        {{- end }}
-        {{- if and false $debug }}
-          {{- warnf "%s fontFamily=%v in preloadFontFamilies=%v: considering @font-face declaration:\n%v"
-              $dbg $fontFamily $preloadFontFamilies . }}
-        {{- end }}
-        {{- $fontStyle := findRESubmatch $fontStyleRE (lower . ) }}
-        {{- with $fontStyle }}
-          {{- $fontStyle = index (last 1 (index . 0) ) 0 }}
-        {{- else }}
-          {{- warnf "%s No match for fontStyleRE=%v in\n%v" $dbg $fontStyleRE . }}
-        {{- end }}
-        {{- $fontWeight := findRESubmatch $fontWeightRE (lower . ) }}
-        {{- with $fontWeight }}
-          {{- $fontWeight = index (last 1 (index . 0) ) 0 }}
-        {{- else }}
-          {{- warnf "%s No match for fontWeightRE=%v in\n%v" $dbg $fontWeightRE . }}
-        {{- end }}
-        {{- if and (in $preloadFontStyles (lower $fontStyle) ) (in $preloadFontWeights (lower $fontWeight) ) }}
-          {{- $availableFontFiles := findRE $availableFontFilesRE (lower . ) }}
-          {{- with $availableFontFiles }}
-            {{- if and false $debug }}
-              {{- warnf "%s availableFontFiles:\n%v" $dbg $availableFontFiles }}
-            {{- end }}
-            {{- range $availableFontFiles }}
-              {{- $fontFormat := findRESubmatch $fontFormatRE (lower . ) }}
-              {{- with $fontFormat }}
-                {{- $fontFormat = index (last 1 (index . 0) ) 0 }}
-              {{- else }}
-                {{- warnf "%s No match for fontFormatRE=%v in\n%v" $dbg $fontFormatRE . }}
-              {{- end }}
-              {{- if (in $preloadFontFormats (lower $fontFormat) ) }}
-                {{- $preloadFontURL := findRESubmatch $fontFileURLRE (lower . ) }}
-                {{- with $preloadFontURL }}
-                  {{- $preloadFontURL = index (last 1 (index . 0) ) 0 }}
-                  {{- if in $preloadFontURLs $preloadFontURL }}
-                    {{- if $debug }}
-                      {{- warnf "%s Ignoring valid font as preloadFontURL=%v is already in preloadFontURLs=%v"
-                          $dbg $preloadFontURL $preloadFontURLs }}
-                    {{- end }}
-                  {{- else }}
-                    {{- $preloadFontURLs = append $preloadFontURL $preloadFontURLs }}
-                    {{- $familyPreloadFonts = append (dict "URL" $preloadFontURL "Type" $fontFormat) $familyPreloadFonts }}
-                    {{- if $debug }}
-                      {{- warnf "%s Appended font with preloadFontURL=%v: familyPreloadFonts=\n%v"
-                          $dbg $preloadFontURL (jsonify (dict "indent" "  ") $familyPreloadFonts) }}
-                    {{- end }}
-                  {{- end }}
-                {{- else }}
-                  {{- warnf "%s No match for fontFileURLRE=%v in\n%v" $dbg $fontFileURLRE . }}
-                {{- end }}
-              {{- else }}
-                {{- if and false $debug }}
-                  {{- warnf "%s Not preloading font: family=%v font-style=%v but format=%v not in preloadFontFormats=%v"
-                    $dbg $fontFamily $fontStyle $fontFormat $preloadFontFormats -}}
-                {{- end }}
-              {{- end }}
-            {{- end }}
-          {{- else }}
-            {{- warnf "%s No match for availableFontFilesRE=%v in\n%v" $dbg $availableFontFilesRE . }}
-          {{- end }}
-        {{- else }}
-          {{- if and false $debug }}
-            {{- warnf "%s Not preloading font: family=%v but style=%v not in preloadFontStyles=%v or weight=%v not in preloadFontWeights=%v"
-              $dbg $fontFamily $fontStyle $preloadFontStyles
-              $fontWeight $preloadFontWeights -}}
-          {{- end }}
-        {{- end }}
-        {{- $preloadFontFamiliesMap = merge $preloadFontFamiliesMap (dict
-          $fontFamily $familyPreloadFonts
-          ) }}
-      {{- else }}
-        {{- if $debug }}
-          {{- warnf "%s Not preloading font: family=%v not in preloadFontFamilies=%v"
-            $dbg $fontFamily $preloadFontFamilies -}}
-        {{- end }}
-      {{- end }}
-    {{- end }}
-  {{- else }}
-    {{- warnf "%s No fonts found to preload. regex=%v stylesheet=%v .Content=\n%v"
-        $dbg $fontMatchRE $styleSheet.unminified (substr $styleSheet.unminified.Content 0 400) -}}
-  {{- end }}
-  {{- if $debug }}
-    {{- warnf "%s Selecting preloadFontFamilies=%v from preloadFontFamiliesMap:\n%v"
-      $dbg $preloadFontFamilies (jsonify (dict "indent" "  ") $preloadFontFamiliesMap) -}}
-  {{- end }}
-  {{- range $fontFamily := $preloadFontFamilies }}
-    {{- with index $preloadFontFamiliesMap . }}
-      {{- $preloadFonts = append . $preloadFonts }}
-      {{- if $debug }}
-        {{- warnf "%s Appended fontFamily=%v to preloadFonts=%v"
-          $dbg $fontFamily $preloadFonts -}}
-      {{- end }}
-    {{- end }}
-  {{- end }}
-  {{- if $debug }}
-    {{- warnf "%s Returning preloadFonts=%v"
-      $dbg $preloadFonts -}}
-  {{- end }}
-{{- end }}
-{{- return $preloadFonts }}
+{{ $fontURLMatches := false }}
+{{ with and $fontsSelfHosted $styleSheet }}
+  {{ with and (reflect.IsMap .) .unminified }}
+    {{ $fontURLMatches = findRE $fontMatchRE (lower .Content ) }}
+  {{ else }}
+  {{ end }}
+{{ end }}
+{{ with $fontURLMatches }}
+  {{ $preloadFontURLs := slice }}
+  {{ range $fontURLMatches }}
+    {{ $fontFamily := findRESubmatch $fontFamilyRE (lower . ) }}
+    {{ with $fontFamily }}
+      {{ $fontFamily = index (last 1 (index . 0) ) 0 }}
+    {{ else }}
+      {{ warnf "%s No match for fontFamilyRE=%v in %v" $dbg $fontStyleRE . }}
+    {{ end }}
+    {{ if in $preloadFontFamilies $fontFamily }}
+      {{ $familyPreloadFonts := slice }}
+      {{ with index $preloadFontFamiliesMap $fontFamily }}
+        {{ $familyPreloadFonts = . }}
+      {{ end }}
+      {{ if and false $debug }}
+        {{ warnf "%s fontFamily=%v in preloadFontFamilies=%v: considering @font-face declaration:\n%v"
+            $dbg $fontFamily $preloadFontFamilies . }}
+      {{ end }}
+      {{ $fontStyle := findRESubmatch $fontStyleRE (lower . ) }}
+      {{ with $fontStyle }}
+        {{ $fontStyle = index (last 1 (index . 0) ) 0 }}
+      {{ else }}
+        {{ warnf "%s No match for fontStyleRE=%v in\n%v" $dbg $fontStyleRE . }}
+      {{ end }}
+      {{ $fontWeight := findRESubmatch $fontWeightRE (lower . ) }}
+      {{ with $fontWeight }}
+        {{ $fontWeight = index (last 1 (index . 0) ) 0 }}
+      {{ else }}
+        {{ warnf "%s No match for fontWeightRE=%v in\n%v" $dbg $fontWeightRE . }}
+      {{ end }}
+      {{ if and (in $preloadFontStyles (lower $fontStyle) ) (in $preloadFontWeights (lower $fontWeight) ) }}
+        {{ $availableFontFiles := findRE $availableFontFilesRE (lower . ) }}
+        {{ with $availableFontFiles }}
+          {{ if and true $debug }}
+            {{ warnf "%s availableFontFiles:\n%v" $dbg $availableFontFiles }}
+          {{ end }}
+          {{ range $availableFontFiles }}
+            {{ $fontFormat := findRESubmatch $fontFormatRE (lower . ) }}
+            {{ with $fontFormat }}
+              {{ $fontFormat = index (last 1 (index . 0) ) 0 }}
+            {{ else }}
+              {{ warnf "%s No match for fontFormatRE=%v in\n%v" $dbg $fontFormatRE . }}
+            {{ end }}
+            {{ if (in $preloadFontFormats (lower $fontFormat) ) }}
+              {{ $preloadFontURL := findRESubmatch $fontFileURLRE (lower . ) }}
+              {{ with $preloadFontURL }}
+                {{ $preloadFontURL = index (last 1 (index . 0) ) 0 }}
+                {{ if in $preloadFontURLs $preloadFontURL }}
+                  {{ if $debug }}
+                    {{ warnf "%s Ignoring valid font as preloadFontURL=%v is already in preloadFontURLs=%v"
+                        $dbg $preloadFontURL $preloadFontURLs }}
+                  {{ end }}
+                {{ else }}
+                  {{ $preloadFontURLs = append $preloadFontURL $preloadFontURLs }}
+                  {{ $familyPreloadFonts = append (dict "URL" $preloadFontURL "Type" $fontFormat) $familyPreloadFonts }}
+                  {{ if $debug }}
+                    {{ warnf "%s Appended font with preloadFontURL=%v: familyPreloadFonts=\n%v"
+                        $dbg $preloadFontURL (jsonify (dict "indent" "  ") $familyPreloadFonts) }}
+                  {{ end }}
+                {{ end }}
+              {{ else }}
+                {{ warnf "%s No match for fontFileURLRE=%v in\n%v" $dbg $fontFileURLRE . }}
+              {{ end }}
+            {{ else }}
+              {{ if and false $debug }}
+                {{ warnf "%s Not preloading font: family=%v font-style=%v but format=%v not in preloadFontFormats=%v"
+                  $dbg $fontFamily $fontStyle $fontFormat $preloadFontFormats }}
+              {{ end }}
+            {{ end }}
+          {{ end }}
+        {{ else }}
+          {{ warnf "%s No match for availableFontFilesRE=%v in\n%v" $dbg $availableFontFilesRE . }}
+        {{ end }}
+      {{ else }}
+        {{ if and false $debug }}
+          {{ warnf "%s Not preloading font: family=%v but style=%v not in preloadFontStyles=%v or weight=%v not in preloadFontWeights=%v"
+            $dbg $fontFamily $fontStyle $preloadFontStyles
+            $fontWeight $preloadFontWeights }}
+        {{ end }}
+      {{ end }}
+      {{ $preloadFontFamiliesMap = merge $preloadFontFamiliesMap (dict
+        $fontFamily $familyPreloadFonts
+        ) }}
+    {{ else }}
+      {{ if $debug }}
+        {{ warnf "%s Not preloading font: family=%v not in preloadFontFamilies=%v"
+          $dbg $fontFamily $preloadFontFamilies }}
+      {{ end }}
+    {{ end }}
+  {{ else }}
+    {{ warnf "%s No fonts found to preload. regex=%v stylesheet=%v .Content=\n%v"
+          $dbg $fontMatchRE $styleSheet.unminified (substr $styleSheet.unminified.Content 0 400) }}
+  {{ end }}
+{{ else }}
+  {{ warnf "%s missing unminified version of stylesheet=%v" $dbg $styleSheet }}
+{{ end }}
+{{ with $preloadFontFamilies }}
+  {{ if $debug }}
+    {{ warnf "%s Selecting preloadFontFamilies=%v from preloadFontFamiliesMap:\n%v"
+      $dbg $preloadFontFamilies (jsonify (dict "indent" "  ") $preloadFontFamiliesMap) }}
+  {{ end }}
+  {{ range $fontFamily := $preloadFontFamilies }}
+    {{ with index $preloadFontFamiliesMap . }}
+      {{ $preloadFonts = append . $preloadFonts }}
+      {{ if $debug }}
+        {{ warnf "%s Appended fontFamily=%v to preloadFonts=%v"
+          $dbg $fontFamily $preloadFonts }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ if $debug }}
+  {{ warnf "%s Returning preloadFonts=%v"
+    $dbg $preloadFonts }}
+{{ end }}
+{{ return $preloadFonts }}
