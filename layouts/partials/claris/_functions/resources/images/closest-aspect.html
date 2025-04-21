@@ -1,104 +1,116 @@
-{{- $bestMatchVersion := false }}
-{{- $template := "claris/_functions/resources/images/closest-aspect" }}
-{{- $page := .Page }}
-{{- $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
-{{- $dbg := printf "%s[%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) (replaceRE `.*?([^/]+)$` `$1` $template) }}
+{{ $bestMatchVersion := false }}
+{{ $template := "claris/_functions/resources/images/closest-aspect" }}
+{{ $page := .Page }}
+{{ $debug := and false (or .Debug ($page.Param "clarisdebug") ) }}
+{{ $dbg := printf "%s [%s->%s]" (replaceRE `.*?((?:[^/]+/){,2})$` `$1` $page.RelPermalink) .Template (replaceRE `.*?([^/]+(?:/[^/]+)?)$` `$1` $template) }}
 
-{{- $matchParams := dict }}
-{{- range $k, $v := . }}
-  {{- if and $v (not (in (slice "Page" "version" "alt" "title") $k) ) }}
-    {{- $matchParams = merge $matchParams (dict $k $v) }}
-  {{- end }}
-{{- end }}
-{{- $versions := .version }}
-{{- $targetWidth := default false .width }}
-{{- $targetHeight := default false .height }}
+{{ $matchParams := dict }}
+{{ range $k, $v := . }}
+  {{ if and $v (not (in (slice "Page" "version" "alt" "title") $k) ) }}
+    {{ $matchParams = merge $matchParams (dict $k $v) }}
+  {{ end }}
+{{ end }}
+{{ $versions := .version }}
+{{ $targetWidth := default false .width }}
+{{ $targetHeight := default false .height }}
+{{ $targetDisposition := default false .disposition }}
 
-{{- with $targetAspect := partial "claris/_functions/resources/images/parse-aspect-ratio" . }}
+{{ with $targetAspect := partial "claris/_functions/resources/images/parse-aspect-ratio" . }}
 
-  {{- $bestMatchVersionMeta := false }}
-  {{- $lowestAspectDeviation := 1e12 }}
-  {{- $greatestSizeRatio := 0.0 }}
+  {{ $bestMatchVersionMeta := false }}
+  {{ $lowestAspectDeviation := 1e12 }}
+  {{ $greatestSizeRatio := 0.0 }}
 
-  {{- if $debug }}
-    {{- $dbg = printf "%s targetAspect=%.3f"
+  {{ if $debug }}
+    {{ $dbg = printf "%s targetAspect=%.3f"
         $dbg $targetAspect }}
-    {{- with $targetWidth }}
-      {{- $dbg = printf "%s targetWidth=%v" $dbg .}}
-    {{- end }}
-    {{- with $targetHeight }}
-      {{- $dbg = printf "%s targetHeight=%v" $dbg .}}
-    {{- end }}
-    {{- if false }}
-      {{- warnf "%s find closest match in versions:\n%v"
+    {{ with $targetWidth }}
+      {{ $dbg = printf "%s targetWidth=%v" $dbg .}}
+    {{ end }}
+    {{ with $targetHeight }}
+      {{ $dbg = printf "%s targetHeight=%v" $dbg .}}
+    {{ end }}
+    {{ if false }}
+      {{ warnf "%s find closest match in versions:\n%v"
           $dbg (jsonify (dict "indent" "  ") $versions) }}
-    {{- end }}
-  {{- end }}
+    {{ end }}
+  {{ end }}
 
-  {{- range $versionID, $versionMeta := $versions }}
-    {{- $candAspect := .ratio }}
-    {{- $candDeviation := math.Pow (sub (div $candAspect $targetAspect ) 1) 2 }}
+  {{ range $versionID, $versionMeta := $versions }}
+    {{ $candAspect := .ratio }}
+    {{ $candDeviation := math.Pow (sub (div $candAspect $targetAspect ) 1) 2 }}
 
-    {{- with .resource }}
-      {{- $widthRatio := 1.0 }}
-      {{- $heightRatio := 1.0 }}
-      {{- $sizeRatio := 1.0 }}
-      {{- if le $candDeviation $lowestAspectDeviation }}
-        {{- $widthRatio = 1.0 }}
-        {{- if $targetWidth }}
-          {{- $widthRatio = div (cast.ToFloat .Width) (cast.ToFloat $targetWidth) }}
-        {{- end }}
-        {{- $heightRatio = 1.0 }}
-        {{- if $targetHeight }}
-          {{- $heightRatio = div (cast.ToFloat .Height) (cast.ToFloat $targetHeight) }}
-        {{- end }}
-        {{- $sizeRatio = (mul (math.Pow $widthRatio 2) (math.Pow $heightRatio 2) ) }}
-        {{- if or (gt $sizeRatio 0.95) (ge $sizeRatio $greatestSizeRatio) }}
-          {{- $bestMatchVersionMeta = $versionMeta }}
-          {{- $lowestAspectDeviation = $candDeviation}}
-          {{- $greatestSizeRatio = $sizeRatio }}
-          {{- if and false $debug }}
-            {{- warnf "%s valid cand: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
+    {{ if or (not $targetDisposition) (and .disposition $targetDisposition (eq .disposition $targetDisposition) ) }}
+      {{ if $debug }}
+        {{ warnf "%s considering version with disposition=%q = %q=targetDisposition" $dbg .disposition $targetDisposition }}
+      {{ end }}
+      {{ with .resource }}
+        {{ $widthRatio := 1.0 }}
+        {{ $heightRatio := 1.0 }}
+        {{ $sizeRatio := 1.0 }}
+        {{ if le $candDeviation $lowestAspectDeviation }}
+          {{ $widthRatio = 1.0 }}
+          {{ if $targetWidth }}
+            {{ $widthRatio = div (cast.ToFloat .Width) (cast.ToFloat $targetWidth) }}
+          {{ end }}
+          {{ $heightRatio = 1.0 }}
+          {{ if $targetHeight }}
+            {{ $heightRatio = div (cast.ToFloat .Height) (cast.ToFloat $targetHeight) }}
+          {{ end }}
+          {{ $sizeRatio = (mul (math.Pow $widthRatio 2) (math.Pow $heightRatio 2) ) }}
+          {{ if or (gt $sizeRatio 0.95) (ge $sizeRatio $greatestSizeRatio) }}
+            {{ $bestMatchVersionMeta = $versionMeta }}
+            {{ $lowestAspectDeviation = $candDeviation}}
+            {{ $greatestSizeRatio = $sizeRatio }}
+            {{ if and false $debug }}
+              {{ warnf "%s valid cand: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
+                  $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
+                  $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
+            {{ end }}
+          {{ else }}
+            {{ if $debug }}
+              {{ warnf "%s too small: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
+                  $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
+                  $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
+            {{ end }}
+          {{ end }}
+        {{ else }}
+          {{ if $debug }}
+            {{ warnf "%s ignoring cand: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
                 $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
                 $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
-          {{- end }}
-        {{- else }}
-          {{- if $debug }}
-            {{- warnf "%s too small: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
-                $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
-                $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
-          {{- end }}
-        {{- end }}
-      {{- else }}
-        {{- if $debug }}
-          {{- warnf "%s ignoring cand: %vx%v candAspect=%.3f candDeviation=%.3f vs. lowestAspectDeviation=%.3f widthRatio=%.3f heightRatio=%.3f sizeRatio=%.3f vs. greatestSizeRatio=%.3f"
-              $dbg .Width .Height $candAspect $candDeviation $lowestAspectDeviation
-              $widthRatio $heightRatio $sizeRatio $greatestSizeRatio }}
-        {{- end }}
-      {{- end }}
-    {{- else }}
-      {{- errorf "%s cand lacks .resource:\n%v"
-          $dbg (jsonify (dict "indent" "  ") . ) }}
-    {{- end }}
-  {{- end }}
-  {{- with $bestMatchVersionMeta }}
-    {{- $bestMatchVersion = (dict
+          {{ end }}
+        {{ end }}
+      {{ else }}
+        {{ errorf "%s cand lacks .resource:\n%v"
+            $dbg (jsonify (dict "indent" "  ") . ) }}
+      {{ end }}
+    {{ else }}
+      {{ if $debug }}
+        {{ warnf "%s ignoring version with disposition=%v != %v=targetDisposition" $dbg .disposition  $targetDisposition }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+  {{ with $bestMatchVersionMeta }}
+    {{ $bestMatchVersion = (dict
       "meta" $bestMatchVersionMeta
       "targetaspect" $targetAspect
       "aspectdeviation" $lowestAspectDeviation
       "sizeratio" $greatestSizeRatio
     ) }}
-    {{- if $debug }}
-      {{- warnf "%s returning bestMatchVersion [%dx%d format=%s]:\n%v"
+    {{ if $debug }}
+      {{ warnf "%s returning bestMatchVersion [%dx%d format=%s]:\n%v"
           $dbg $bestMatchVersion.meta.resource.Width $bestMatchVersion.meta.resource.Height $bestMatchVersion.meta.resource.MediaType.Type
           (jsonify (dict "indent" "  ") $bestMatchVersion) }}
-    {{- end }}
-  {{- else }}
-    {{- errorf "%s failed to find an image in versions\n%v\nmatching params\n%v"
-        $dbg (jsonify (dict "indent" "  ") $versions) (jsonify (dict "indent" "  ") $matchParams) }}
-  {{- end }}
-{{- else }}
-  {{- errorf "%s unable to determine targetAspect based on params\n%v"
+    {{ end }}
+  {{ else }}
+    {{ if $debug }}
+      {{ warnf "%s failed to find an image in versions\n%v\nmatching params\n%v"
+          $dbg (jsonify (dict "indent" "  ") $versions) (jsonify (dict "indent" "  ") $matchParams) }}
+    {{ end }}
+  {{ end }}
+{{ else }}
+  {{ errorf "%s unable to determine targetAspect based on params\n%v"
       $dbg (jsonify (dict "indent" "  ") $matchParams) }}
-{{- end }}
-{{- return $bestMatchVersion }}
+{{ end }}
+{{ return $bestMatchVersion }}
