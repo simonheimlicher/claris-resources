@@ -116,19 +116,25 @@
     {{ warnf "%s intermediateFormatBaseImg=%s[%dx%d]" $dbg .MediaType.SubType .Width .Height }}
   {{ end }}
 
-  {{ $placeholderSvg := printf "<svg xmlns=%q viewBox=%q></svg>" "http://www.w3.org/2000/svg" (printf "0 0 %d %d" $intermediateFormatBaseImg.Width $intermediateFormatBaseImg.Height) | safeHTML }}
-  {{ $placeholderInlineImg := printf "data:image/svg+xml,%s" $placeholderSvg | replaceRE " " "%20" | replaceRE "<" "%3c" | replaceRE ">" "%3e" | replaceRE "\"" "'" | safeURL }}
+  {{ $dummyDataURL := `data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%201700%203024'%3e%3c/svg%3e` | safeURL }}
+  {{ $placeholderFormat := "webp" }}
+  {{ $placeholderSize := "32x" }}
+  {{ $placeholderQuality := 50 }}
 
-  {{ if $includePlaceholder }}
-    {{ $placeholderFormat := "webp" }}
-    {{ $placeholderSize := "32x" }}
-    {{ $placeholderQuality := 40 }}
-    {{ $placeholderBlurred := $intermediateFormatBaseImg | images.Filter (images.GaussianBlur 32) }}
-    {{ $placeholderBlurredResized := $placeholderBlurred.Resize (printf "%s %s" $placeholderSize $placeholderQuality) }}
-    {{ $placeholderBlurredResizedBlurred := $placeholderBlurredResized | images.Filter (images.GaussianBlur 2) }}
-    {{ $placeholder := $placeholderBlurredResizedBlurred.Resize (printf "%s %s %s" $placeholderSize $placeholderFormat $placeholderQuality) }}
-    {{ $placeholderInlineImg = printf "data:%s;base64,%s" $placeholder.MediaType ($placeholder.Content | base64Encode) | safeURL | safeHTMLAttr }}
-  {{ end }}
+  {{/* Step 1: Heavily blur original */}}
+  {{ $placeholderBlurred := $intermediateFormatBaseImg | images.Filter (images.GaussianBlur 32) }}
+
+  {{/* Step 2: Resize small (LQIP size) */}}
+  {{ $placeholderResized := $placeholderBlurred.Resize (printf "%s %s" $placeholderSize $placeholderQuality) }}
+
+  {{/* Step 3: Slight extra blur to hide artifacts */}}
+  {{ $placeholderExtraBlurred := $placeholderResized | images.Filter (images.GaussianBlur 2) }}
+
+  {{/* Step 4: Final encode */}}
+  {{ $placeholderImg := $placeholderExtraBlurred.Resize (printf "%s %s %d" $placeholderSize $placeholderFormat $placeholderQuality) }}
+  {{ $placeholderImgDataURL := printf "data:%s;base64,%s" $placeholderImg.MediaType ($placeholderImg.Content | base64Encode | safeURL) }}
+  {{/* NOTE: URL encoding does not appear to be requiredt to pass validator.w3.org
+   | replace `<` `%3C` | replace `>` `%3E` | replace `#` `%23` | replace `"` `'`  */}}
 
   {{ $maxWidth = math.Min $maxWidth $intermediateFormatBaseImg.Width | cast.ToInt }}
   {{ $roundBase := 2.0 }}
@@ -460,7 +466,8 @@
   {{ end }}
 
   {{ $imageFormatSrcsets = (dict
-    "placeholder" $placeholderInlineImg
+    "dummy" $dummyDataURL
+    "placeholder" $placeholderImgDataURL
     "formats" $formatSrcsets
   ) }}
   {{ if and false $debug }}
