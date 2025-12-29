@@ -285,7 +285,7 @@
   {{ end }}
 {{ end }}
 
-{{ with and $processedImg (partialCached "partials/claris/_functions/resources/images/is-image" $processedImg $processedImg) }}
+{{ with and $processedImg (partialCached "claris/_functions/resources/images/is-image" $processedImg $processedImg) }}
   {{ if $debug }}
     {{ warnf "%s returning %v[%dx%d ratio=%.4g] from %v[%dx%d ratio=%.4g] from args:\n%v\nprocessImageArgs: %v" $dbg
         $processedImg.MediaType

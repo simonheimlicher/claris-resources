@@ -13,9 +13,10 @@
 
 {{ $targetQuality := default "default" .quality }}
 
-{{/* FIXME: We cannot use webp as intermediate format due to a bug in a library used by Hugo, which leads to
- muted black and white levels when resizing WebP images
- https://github.com/gohugoio/hugo/issues/8879#issue-966429273 */}}
+{{/* NOTE: Using TIFF as intermediate format for quality optimization.
+     PNG was tried but produced different compression characteristics.
+     The megapixel-based output cap handles OOM prevention.
+     Ref: https://github.com/gohugoio/hugo/issues/8879#issue-966429273 */}}
 {{ $preferredFormat := "webp" }}
 {{ $defaultFormat := "original" }}
 {{ $intermediateFormat := default "tiff" }}
@@ -103,6 +104,7 @@
     {{ warnf "%s targetFormats=%v: processing original=%v to intermediate=%v" $dbg
         $targetFormats $originalFormat $intermediateFormat }}
   {{ end }}
+
   {{ $intermediateFormatBaseImg = partial "claris/_functions/resources/images/process-image" (merge $imageResourceArgs  (dict
       "resource" $img
       "format" $intermediateFormat
@@ -117,6 +119,23 @@
   {{ end }}
 
   {{ $maxWidth = math.Min $maxWidth $intermediateFormatBaseImg.Width | cast.ToInt }}
+  
+  {{/* MEMORY-BASED OUTPUT LIMIT: Cap output size based on megapixels (the actual memory proxy).
+       Hugo v0.153+ uses WASM-based WebP encoding with a fixed memory ceiling.
+       Default: 6 MP (~24MB for RGBA) - conservative for in-memory server mode concurrency.
+       Configurable via site params for environments with more headroom. */}}
+  {{ $maxOutputMP := default 6.0 (site.Params.images.maxOutputMegapixels) }}
+  {{ $aspectRatio := div (float $intermediateFormatBaseImg.Width) $intermediateFormatBaseImg.Height }}
+  {{/* Derive max width from MP limit: MP = W * H = W * (W/AR) = W²/AR → W = sqrt(MP * AR * 1e6) */}}
+  {{ $maxWidthFromMP := int (math.Floor (math.Sqrt (mul $maxOutputMP $aspectRatio 1.0e6))) }}
+  {{ if gt $maxWidth $maxWidthFromMP }}
+    {{ if $debug }}
+      {{ $currentMP := div (mul (float $maxWidth) (div (float $maxWidth) $aspectRatio)) 1.0e6 }}
+      {{ warnf "%s Capping maxWidth from %d (%.1f MP) to %d (%.1f MP limit)" 
+          $dbg $maxWidth $currentMP $maxWidthFromMP $maxOutputMP }}
+    {{ end }}
+    {{ $maxWidth = $maxWidthFromMP }}
+  {{ end }}
   {{ $roundBase := 2.0 }}
   {{ $maxToMinRatio := math.Max 1 (div (float $maxWidth) $responsiveMinWidth) }}
   {{ $numStepsToDouble := 2 }}
@@ -239,6 +258,7 @@
       {{ $directionDivisorContinue := 4 }}
       {{ $directionDivisorReverse := 4 }}
 
+
       {{ range $widthIdx, $widthSpec := $srcSetWidths }}
         {{ if not $qualityReferenceWidth }}
           {{ if or (ge $widthSpec $referenceWidth) (eq $widthIdx (sub (len $srcSetWidths) 1) ) }}
@@ -255,6 +275,8 @@
                   {{ errorf "%s invalid candQuality=%v" $dbg $candQuality }}
                 {{ end }}
 
+                {{/* Quality optimization must run at actual target resolution (not a proxy)
+                     because KB/MP ratio varies significantly with image dimensions. */}}
                 {{ $resizedCandImg := partial "claris/_functions/resources/images/process-image" (merge $formatSrcSetArgs (dict
                     "resource" $formatBaseImg
                     "width" $nominalWidth
@@ -270,6 +292,9 @@
                   {{ $deviation := sub 1.0 (math.Min (div $candKBPerMP $targetKBperMP) (div $targetKBperMP $candKBPerMP) ) }}
                   {{ if or (eq $i (sub $maxIterations 1) ) (lt $deviation $maxDeviation) (eq $candQuality $qualitySpec.min) (eq $candQuality $qualitySpec.max) }}
                     {{ $qualityReferenceWidth = int (math.Max $qualitySpec.min (math.Min $candQuality $qualitySpec.max) ) }}
+                    {{ if and (eq $i (sub $maxIterations 1)) (ge $deviation $maxDeviation) (eq $candQuality $qualitySpec.min) }}
+                      {{ warnf "%s failed to meet target size within %d iterations: quality=%d candKBperMP=%.1f targetKBperMP=%d deviation=%.2f" $dbg $maxIterations $qualityReferenceWidth $candKBPerMP $targetKBperMP $deviation }}
+                    {{ end }}
                     {{ if $debug }}
                       {{ $terminationReason := printf "after %d iterations" $maxIterations }}
                       {{ if not (eq $i (sub $maxIterations 1) ) }}
