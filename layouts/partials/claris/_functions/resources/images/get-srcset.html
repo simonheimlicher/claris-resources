@@ -119,7 +119,7 @@
   {{ end }}
 
   {{ $maxWidth = math.Min $maxWidth $intermediateFormatBaseImg.Width | cast.ToInt }}
-  
+
   {{/* MEMORY-BASED OUTPUT LIMIT: Cap output size based on megapixels (the actual memory proxy).
        Hugo v0.153+ uses WASM-based WebP encoding with a fixed memory ceiling.
        Default: 6 MP (~24MB for RGBA) - conservative for in-memory server mode concurrency.
@@ -128,14 +128,7 @@
   {{ $aspectRatio := div (float $intermediateFormatBaseImg.Width) $intermediateFormatBaseImg.Height }}
   {{/* Derive max width from MP limit: MP = W * H = W * (W/AR) = W²/AR → W = sqrt(MP * AR * 1e6) */}}
   {{ $maxWidthFromMP := int (math.Floor (math.Sqrt (mul $maxOutputMP $aspectRatio 1.0e6))) }}
-  {{ if gt $maxWidth $maxWidthFromMP }}
-    {{ if $debug }}
-      {{ $currentMP := div (mul (float $maxWidth) (div (float $maxWidth) $aspectRatio)) 1.0e6 }}
-      {{ warnf "%s Capping maxWidth from %d (%.1f MP) to %d (%.1f MP limit)" 
-          $dbg $maxWidth $currentMP $maxWidthFromMP $maxOutputMP }}
-    {{ end }}
-    {{ $maxWidth = $maxWidthFromMP }}
-  {{ end }}
+
   {{ $roundBase := 2.0 }}
   {{ $maxToMinRatio := math.Max 1 (div (float $maxWidth) $responsiveMinWidth) }}
   {{ $numStepsToDouble := 2 }}
@@ -223,7 +216,17 @@
       {{ $width = $maxWidth }}
     {{ end }}
 
-    {{ $srcSetWidths = $srcSetWidths | append $width }}
+    {{/* Ensure we do not exceed memory-based output limit */}}
+    {{ if le $width $maxWidthFromMP }}
+      {{ $srcSetWidths = $srcSetWidths | append $width }}
+    {{ else }}
+      {{ if $debug }}
+        {{ $currentMP := div (mul (float $width) (div (float $width) $aspectRatio)) 1.0e6 }}
+        {{ warnf "%s Not creating image with width of %d (%.1f MP) as this would exceed the %.1f MP limit"
+            $dbg $width $currentMP $maxOutputMP }}
+      {{ end }}
+    {{ end }}
+
   {{ end }}
 
   {{ range $targetFormat := $targetFormats }}
