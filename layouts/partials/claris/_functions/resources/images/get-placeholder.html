@@ -60,7 +60,9 @@
   {{ end }}
 {{ end }}
 
-{{ $includeOriginalImage := default false .includeoriginal }}
+{{/* NOTE: "includeoriginal" option was removed. Hugo's WASM-based WebP encoder (v0.153+)
+     has a fixed memory ceiling (~6MP default), making it impossible to reliably include
+     unprocessed originals. All images are now capped to maxOutputMegapixels. */}}
 {{ $includePlaceholder := default false .includeplaceholder }}
 
 {{ $targetFormats := (slice $preferredFormat $defaultFormat) | uniq }}

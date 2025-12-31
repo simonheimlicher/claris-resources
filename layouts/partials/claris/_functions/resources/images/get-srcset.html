@@ -60,7 +60,9 @@
   {{ end }}
 {{ end }}
 
-{{ $includeOriginalImage := default false .includeoriginal }}
+{{/* NOTE: "includeoriginal" option was removed. Hugo's WASM-based WebP encoder (v0.153+)
+     has a fixed memory ceiling (~6MP default), making it impossible to reliably include
+     unprocessed originals. All images are now capped to $maxOutputMP. */}}
 {{ $includePlaceholder := default false .includeplaceholder }}
 
 {{ $targetFormats := (slice $preferredFormat $defaultFormat) | uniq }}
@@ -120,14 +122,41 @@
 
   {{ $maxWidth = math.Min $maxWidth $intermediateFormatBaseImg.Width | cast.ToInt }}
 
-  {{/* MEMORY-BASED OUTPUT LIMIT: Cap output size based on megapixels (the actual memory proxy).
-       Hugo v0.153+ uses WASM-based WebP encoding with a fixed memory ceiling.
-       Default: 6 MP (~24MB for RGBA) - conservative for in-memory server mode concurrency.
-       Configurable via site params for environments with more headroom. */}}
+  {{/* ==========================================================================
+       SRCSET WIDTH CALCULATION - TWO-PHASE APPROACH
+       ==========================================================================
+       Phase 1: Calculate IDEAL widths based on responsive design needs.
+                These are the widths we WANT, calculated from the original image
+                dimensions to ensure consistent step sizes (e.g., 384, 512, 768...).
+
+       Phase 2: Determine ACTUAL widths we can produce given memory constraints.
+                Hugo v0.153+ uses WASM-based WebP encoding with a fixed memory ceiling.
+                We cap all output to $maxOutputMP (default 6MP) because:
+                - WebP is universally supported; JPEG fallback is obsolete
+                - Consistent behavior across all formats is simpler and predictable
+                - The "include original" option was removed as it cannot be reliably
+                  fulfilled when originals exceed the memory limit
+
+       This separation ensures:
+                - Intermediate widths (e.g., 768px) remain consistent regardless of
+                  whether the original exceeds the MP limit
+                - The srcset always has a valid "maximum" entry (capped if needed)
+                - No 404s or invalid srcset strings from missing entries
+       ========================================================================== */}}
+
+  {{/* MEMORY LIMIT: Calculate maximum feasible output size */}}
   {{ $maxOutputMP := default 6.0 (site.Params.images.maxOutputMegapixels) }}
   {{ $aspectRatio := div (float $intermediateFormatBaseImg.Width) $intermediateFormatBaseImg.Height }}
   {{/* Derive max width from MP limit: MP = W * H = W * (W/AR) = W²/AR → W = sqrt(MP * AR * 1e6) */}}
   {{ $maxWidthFromMP := int (math.Floor (math.Sqrt (mul $maxOutputMP $aspectRatio 1.0e6))) }}
+
+  {{/* $effectiveMaxWidth is the largest image we can actually produce */}}
+  {{ $effectiveMaxWidth := math.Min $maxWidth $maxWidthFromMP | int }}
+
+  {{ if and $debug (lt $effectiveMaxWidth $maxWidth) }}
+    {{ warnf "%s Original width %d exceeds MP limit; capping to %d (%.1f MP limit)"
+        $dbg $maxWidth $effectiveMaxWidth $maxOutputMP }}
+  {{ end }}
 
   {{ $roundBase := 2.0 }}
   {{ $maxToMinRatio := math.Max 1 (div (float $maxWidth) $responsiveMinWidth) }}
@@ -194,6 +223,9 @@
     )
   ) }}
 
+  {{/* PHASE 1: Calculate IDEAL widths based on original image dimensions.
+       This ensures consistent step sizes regardless of MP limit. */}}
+  {{ $idealWidths := slice }}
   {{ range $i, $exp := (seq $numWidths) }}
     {{ $width := 0 }}
     {{ if lt $i (sub $numWidths 1) }}
@@ -205,8 +237,6 @@
 
       {{ if eq $i 0 }}
         {{ $baseWidth = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
-        {{/* {{ warnf "%s\n    maxWidth=%d maxToMinRatio=%d numWidths=%d [baseWidth=%d powerBase=%.2f roundToNearest=%.0f]"
-            $dbg $maxWidth $maxToMinRatio $numWidths $baseWidth $powerBase $roundToNearest }} */}}
       {{ end }}
 
       {{ $width = int (math.Round (mul (math.Round (div $widthCalculated $roundToNearest) ) $roundToNearest) ) }}
@@ -216,17 +246,23 @@
       {{ $width = $maxWidth }}
     {{ end }}
 
-    {{/* Ensure we do not exceed memory-based output limit */}}
-    {{ if le $width $maxWidthFromMP }}
-      {{ $srcSetWidths = $srcSetWidths | append $width }}
-    {{ else }}
-      {{ if $debug }}
-        {{ $currentMP := div (mul (float $width) (div (float $width) $aspectRatio)) 1.0e6 }}
-        {{ warnf "%s Not creating image with width of %d (%.1f MP) as this would exceed the %.1f MP limit"
-            $dbg $width $currentMP $maxOutputMP }}
-      {{ end }}
-    {{ end }}
+    {{ $idealWidths = $idealWidths | append $width }}
+  {{ end }}
 
+  {{/* PHASE 2: Cap widths to $effectiveMaxWidth and deduplicate.
+       Widths exceeding the limit are capped (not dropped) to ensure
+       the srcset always has a valid maximum entry. */}}
+  {{ range $width := $idealWidths }}
+    {{ $actualWidth := math.Min $width $effectiveMaxWidth | int }}
+    {{/* Only append if not already in the list (deduplication) */}}
+    {{ if not (in $srcSetWidths $actualWidth) }}
+      {{ $srcSetWidths = $srcSetWidths | append $actualWidth }}
+    {{ end }}
+  {{ end }}
+
+  {{ if $debug }}
+    {{ warnf "%s Ideal widths: %v -> Actual widths: %v (capped to %d)"
+        $dbg $idealWidths $srcSetWidths $effectiveMaxWidth }}
   {{ end }}
 
   {{ range $targetFormat := $targetFormats }}
