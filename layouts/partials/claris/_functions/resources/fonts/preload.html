@@ -58,10 +58,20 @@
 {{ $fontsSelfHosted := $page.Param "assets.styles.fonts.selfhosted" | default false }}
 
 {{ $fontURLMatches := false }}
-{{ with and $fontsSelfHosted $styleSheet }}
-  {{ with and (reflect.IsMap .) .unminified }}
-    {{ $fontURLMatches = findRE $fontMatchRE (lower .Content ) }}
-  {{ else }}
+{{/* Use FontFaceResource if provided (for split CSS where @font-face is in deferred bundle) */}}
+{{ $fontFaceResource := .FontFaceResource }}
+{{ with and $fontsSelfHosted $fontFaceResource }}
+  {{ $fontURLMatches = findRE $fontMatchRE (lower .Content ) }}
+  {{ if $debug }}
+    {{ warnf "%s Using FontFaceResource for preload: found %d @font-face matches" $dbg (len $fontURLMatches) }}
+  {{ end }}
+{{ else }}
+  {{/* Fallback to stylesheet content (for non-split CSS) */}}
+  {{ with and $fontsSelfHosted $styleSheet }}
+    {{ with and (reflect.IsMap .) .unminified }}
+      {{ $fontURLMatches = findRE $fontMatchRE (lower .Content ) }}
+    {{ else }}
+    {{ end }}
   {{ end }}
 {{ end }}
 {{ with $fontURLMatches }}
