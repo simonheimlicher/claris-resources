@@ -164,14 +164,27 @@
   {{ $powerBase := math.Pow 2.0 (div 1.0 $numStepsToDouble) }}
   {{ $numWidths := int (add 1 (math.Ceil (div (math.Log $maxToMinRatio) (math.Log $powerBase) ) ) ) }}
 
-  {{ if gt $numWidths 1 }}
+  {{/* ==========================================================================
+       STEP-WIDTH CALCULATION: FIXED OR WIDTH-DEPENDENT
+
+       The step-width is determined by the `$powerBase` variable.
+       There are two options to calculate it:
+
+       1. Fixed and independent of the original and maximal image size: This
+          is preferrable if all rendered sizes of all images should have the same widths.
+       2. Variable and dependent on the original and maximal image size: This
+          is preferrable if the number of images sizes should be constant
+       ========================================================================== */}}
+  {{ $adjustPowerBase := false }}
+  {{ if and $adjustPowerBase (gt $numWidths 1) }}
     {{ $powerBase = math.Pow $maxToMinRatio (div 1.0 (sub $numWidths 1.0) ) }}
-    {{ if $debug }}
-      {{ warnf "%s maxToMinRatio = ceil(%v / %v) = %v" $dbg
-          $maxWidth $responsiveMinWidth $maxToMinRatio }}
-      {{ warnf "%s numWidths = %d = 1 + ceil(log(maxToMinRatio) / log(powerBase) ) [log(maxToMinRatio)=%v log(powerBase)=%v]"
-          $dbg $numWidths (math.Log $maxToMinRatio) (math.Log $powerBase) }}
-    {{ end }}
+  {{ end }}
+
+  {{ if $debug }}
+    {{ warnf "%s maxToMinRatio = ceil(%v / %v) = %v" $dbg
+        $maxWidth $responsiveMinWidth $maxToMinRatio }}
+    {{ warnf "%s numWidths = %d = 1 + ceil(log(maxToMinRatio) / log(powerBase) ) [log(maxToMinRatio)=%v log(powerBase)=%v]"
+        $dbg $numWidths (math.Log $maxToMinRatio) (math.Log $powerBase) }}
   {{ end }}
 
   {{ if $debug }}
@@ -252,7 +265,11 @@
   {{/* PHASE 2: Cap widths to $effectiveMaxWidth and deduplicate.
        Widths exceeding the limit are capped (not dropped) to ensure
        the srcset always has a valid maximum entry. */}}
+  {{ $cappedByMpLimit := false }}
   {{ range $width := $idealWidths }}
+    {{ if gt $width $effectiveMaxWidth }}
+      {{ $cappedByMpLimit = true }}
+    {{ end }}
     {{ $actualWidth := math.Min $width $effectiveMaxWidth | int }}
     {{/* Only append if not already in the list (deduplication) */}}
     {{ if not (in $srcSetWidths $actualWidth) }}
@@ -261,8 +278,9 @@
   {{ end }}
 
   {{ if $debug }}
-    {{ warnf "%s Ideal widths: %v -> Actual widths: %v (capped to %d)"
-        $dbg $idealWidths $srcSetWidths $effectiveMaxWidth }}
+    {{ warnf "%s Ideal widths: %v -> Actual widths: %v%s"
+        $dbg $idealWidths $srcSetWidths
+        (cond $cappedByMpLimit (printf "(capped to %d)" $effectiveMaxWidth ) "") }}
   {{ end }}
 
   {{ range $targetFormat := $targetFormats }}
@@ -488,7 +506,7 @@
           "format" $targetFormat
           "srcset" $srcSetList
           ) }}
-        {{ if or false $debug }}
+        {{ if and false $debug }}
           {{ warnf "%s appending formatParams:\n%v"
               $dbg (jsonify (dict "indent" "  ") $formatParams) }}
         {{ end }}
